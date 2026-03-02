@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback } from "react";
 import { type IDockviewHeaderActionsProps } from "dockview-react";
 import {
   IconPlus,
@@ -163,15 +163,17 @@ const ACTION_BTN =
 function GroupSplitCloseActions({ group, containerApi }: IDockviewHeaderActionsProps) {
   const centerGroupId = useDockviewStore((s) => s.centerGroupId);
   const isChatGroup = group.id === centerGroupId;
+  const isMaximized = useDockviewStore((s) => s.preMaximizeLayout !== null);
+  const storeMaximize = useDockviewStore((s) => s.maximizeGroup);
+  const storeExitMaximize = useDockviewStore((s) => s.exitMaximizedLayout);
 
   const handleMaximize = useCallback(() => {
-    if (containerApi.hasMaximizedGroup()) {
-      containerApi.exitMaximizedGroup();
+    if (isMaximized) {
+      storeExitMaximize();
     } else {
-      const panel = group.activePanel;
-      if (panel) containerApi.maximizeGroup(panel);
+      storeMaximize(group.id);
     }
-  }, [group, containerApi]);
+  }, [group.id, isMaximized, storeMaximize, storeExitMaximize]);
 
   const handleSplitRight = useCallback(() => {
     containerApi.addGroup({ referenceGroup: group, direction: "right" });
@@ -200,19 +202,16 @@ function GroupSplitCloseActions({ group, containerApi }: IDockviewHeaderActionsP
     }
   }, [group, containerApi]);
 
-  const [isMaximized, setIsMaximized] = useState(() => containerApi.hasMaximizedGroup());
-  useEffect(() => {
-    const disposable = containerApi.onDidMaximizedGroupChange(() => {
-      setIsMaximized(containerApi.hasMaximizedGroup());
-    });
-    return () => disposable.dispose();
-  }, [containerApi]);
-
   return (
     <>
       <Tooltip>
         <TooltipTrigger asChild>
-          <button type="button" className={ACTION_BTN} onClick={handleMaximize}>
+          <button
+            type="button"
+            className={ACTION_BTN}
+            onClick={handleMaximize}
+            data-testid="dockview-maximize-btn"
+          >
             {isMaximized ? (
               <IconArrowsMinimize className="h-3 w-3" />
             ) : (
@@ -241,7 +240,12 @@ function GroupSplitCloseActions({ group, containerApi }: IDockviewHeaderActionsP
       {!isChatGroup && (
         <Tooltip>
           <TooltipTrigger asChild>
-            <button type="button" className={ACTION_BTN} onClick={handleCloseGroup}>
+            <button
+              type="button"
+              className={ACTION_BTN}
+              onClick={handleCloseGroup}
+              data-testid="dockview-close-group-btn"
+            >
               <IconX className="h-3 w-3" />
             </button>
           </TooltipTrigger>

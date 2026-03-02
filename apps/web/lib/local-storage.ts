@@ -352,6 +352,60 @@ export function setSessionLayout(sessionId: string, layout: object): void {
   }
 }
 
+// --- Dockview per-session maximize state (sessionStorage) ---
+const DOCKVIEW_SESSION_MAXIMIZE_PREFIX = "kandev.dockview.maximize.";
+
+export type SessionMaximizeState = {
+  /** The pre-maximize (normal) layout to restore on exit-maximize. */
+  preMaximizeLayout: object;
+  /** Native dockview JSON (api.toJSON()) for the maximized layout. */
+  maximizedDockviewJson: object;
+};
+
+function isSessionMaximizeState(value: unknown): value is SessionMaximizeState {
+  if (!value || typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.preMaximizeLayout === "object" &&
+    v.preMaximizeLayout !== null &&
+    typeof v.maximizedDockviewJson === "object" &&
+    v.maximizedDockviewJson !== null
+  );
+}
+
+export function getSessionMaximizeState(sessionId: string): SessionMaximizeState | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(`${DOCKVIEW_SESSION_MAXIMIZE_PREFIX}${sessionId}`);
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    return isSessionMaximizeState(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setSessionMaximizeState(sessionId: string, state: SessionMaximizeState): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(
+      `${DOCKVIEW_SESSION_MAXIMIZE_PREFIX}${sessionId}`,
+      JSON.stringify(state),
+    );
+  } catch {
+    // Ignore write failures
+  }
+}
+
+export function removeSessionMaximizeState(sessionId: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(`${DOCKVIEW_SESSION_MAXIMIZE_PREFIX}${sessionId}`);
+  } catch {
+    // Ignore
+  }
+}
+
 // Internal storage keys for open file tabs
 const OPEN_FILES_KEY = "kandev.openFiles";
 const ACTIVE_TAB_KEY = "kandev.activeTab";
@@ -537,6 +591,7 @@ export function cleanupTaskStorage(taskId: string, sessionIds: string[]): void {
 
   // Session-keyed storage — clean all sessions belonging to the task
   for (const sessionId of sessionIds) {
+    removeSessionMaximizeState(sessionId);
     removeSessionStorage(`${CHAT_DRAFT_TEXT_KEY}.${sessionId}`);
     removeSessionStorage(`${CHAT_DRAFT_CONTENT_KEY}.${sessionId}`);
     removeSessionStorage(`${CHAT_DRAFT_ATTACHMENTS_KEY}.${sessionId}`);
