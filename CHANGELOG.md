@@ -2,7 +2,23 @@
 
 All notable changes to Kandev.
 
+## 0.11 - 2026-03-03
+
+### Bug Fixes
+
+- include agent_profile_id in session WS events to resolve stale MCP status ([#354](https://github.com/kdlbs/kandev/pull/354))
+
 ## 0.10 - 2026-03-02
+
+### Features
+
+- install agents on env preparation remote executors ([#352](https://github.com/kdlbs/kandev/pull/352))
+- improve chat input ux ([#350](https://github.com/kdlbs/kandev/pull/350))
+- startup health status ([#344](https://github.com/kdlbs/kandev/pull/344))
+- web e2e tests ([#304](https://github.com/kdlbs/kandev/pull/304))
+- add utility agents for one-shot AI tasks ([#341](https://github.com/kdlbs/kandev/pull/341))
+- add Dockerfile, K8s manifests, and deployment docs ([#303](https://github.com/kdlbs/kandev/pull/303))
+- improve session restoration for complete/failed/cancelled ([#302](https://github.com/kdlbs/kandev/pull/302))
 
 ### Bug Fixes
 
@@ -25,27 +41,17 @@ All notable changes to Kandev.
 - lazy Docker client initialization to avoid startup errors ([#300](https://github.com/kdlbs/kandev/pull/300))
 - strip terminal query responses from buffer replay on reconnect ([#301](https://github.com/kdlbs/kandev/pull/301))
 
-### Features
-
-- install agents on env preparation remote executors ([#352](https://github.com/kdlbs/kandev/pull/352))
-- improve chat input ux ([#350](https://github.com/kdlbs/kandev/pull/350))
-- startup health status ([#344](https://github.com/kdlbs/kandev/pull/344))
-- web e2e tests ([#304](https://github.com/kdlbs/kandev/pull/304))
-- add utility agents for one-shot AI tasks ([#341](https://github.com/kdlbs/kandev/pull/341))
-- add Dockerfile, K8s manifests, and deployment docs ([#303](https://github.com/kdlbs/kandev/pull/303))
-- improve session restoration for complete/failed/cancelled ([#302](https://github.com/kdlbs/kandev/pull/302))
-
 ## 0.9 - 2026-02-27
-
-### Bug Fixes
-
-- release notes button not visible on new database ([#299](https://github.com/kdlbs/kandev/pull/299))
-- clear MCP pending requests on session transitions ([#296](https://github.com/kdlbs/kandev/pull/296))
 
 ### Features
 
 - release notes ([#298](https://github.com/kdlbs/kandev/pull/298))
 - improve task launch ([#297](https://github.com/kdlbs/kandev/pull/297))
+
+### Bug Fixes
+
+- release notes button not visible on new database ([#299](https://github.com/kdlbs/kandev/pull/299))
+- clear MCP pending requests on session transitions ([#296](https://github.com/kdlbs/kandev/pull/296))
 
 ## 0.8 - 2026-02-26
 
@@ -55,25 +61,25 @@ All notable changes to Kandev.
 
 ## 0.7 - 2026-02-26
 
-### Bug Fixes
-
-- flaky test ([#292](https://github.com/kdlbs/kandev/pull/292))
-
 ### Features
 
 - improve vscode cleanup ([#294](https://github.com/kdlbs/kandev/pull/294))
 - mermaid support ([#293](https://github.com/kdlbs/kandev/pull/293))
 
-## 0.6 - 2026-02-26
-
 ### Bug Fixes
 
-- duplicated start message ([#289](https://github.com/kdlbs/kandev/pull/289))
+- flaky test ([#292](https://github.com/kdlbs/kandev/pull/292))
+
+## 0.6 - 2026-02-26
 
 ### Features
 
 - improve workflow auto start ([#291](https://github.com/kdlbs/kandev/pull/291))
 - improve layout manager ([#290](https://github.com/kdlbs/kandev/pull/290))
+
+### Bug Fixes
+
+- duplicated start message ([#289](https://github.com/kdlbs/kandev/pull/289))
 
 ## 0.5 - 2026-02-26
 
@@ -86,15 +92,15 @@ All notable changes to Kandev.
 
 ## 0.4 - 2026-02-25
 
-### Bug Fixes
-
-- vscode not being killed ([#284](https://github.com/kdlbs/kandev/pull/284))
-- agents stuck on starting after restart ([#283](https://github.com/kdlbs/kandev/pull/283))
-
 ### Features
 
 - claude code auth setup for remote executors ([#285](https://github.com/kdlbs/kandev/pull/285))
 - reduce sql queries amount ([#282](https://github.com/kdlbs/kandev/pull/282))
+
+### Bug Fixes
+
+- vscode not being killed ([#284](https://github.com/kdlbs/kandev/pull/284))
+- agents stuck on starting after restart ([#283](https://github.com/kdlbs/kandev/pull/283))
 
 ## 0.3 - 2026-02-25
 
@@ -111,13 +117,6 @@ All notable changes to Kandev.
 
 ## 0.1 - 2026-02-25
 
-### Bug Fixes
-
-- vscode ([#279](https://github.com/kdlbs/kandev/pull/279))
-- layout switching messing panels ([#278](https://github.com/kdlbs/kandev/pull/278))
-- worktree folder removal ([#277](https://github.com/kdlbs/kandev/pull/277))
-- make dev use local db ([#276](https://github.com/kdlbs/kandev/pull/276))
-
 ### Features
 
 - improve release script
@@ -125,15 +124,22 @@ All notable changes to Kandev.
 - chat improvements ([#280](https://github.com/kdlbs/kandev/pull/280))
 - default github runners ([#275](https://github.com/kdlbs/kandev/pull/275))
 
-## 0.0.12 - 2026-02-24
-
 ### Bug Fixes
 
-- make github release atomic
+- vscode ([#279](https://github.com/kdlbs/kandev/pull/279))
+- layout switching messing panels ([#278](https://github.com/kdlbs/kandev/pull/278))
+- worktree folder removal ([#277](https://github.com/kdlbs/kandev/pull/277))
+- make dev use local db ([#276](https://github.com/kdlbs/kandev/pull/276))
+
+## 0.0.12 - 2026-02-24
 
 ### Features
 
 - improve release script
+
+### Bug Fixes
+
+- make github release atomic
 
 ## 0.0.11 - 2026-02-24
 
@@ -145,17 +151,6 @@ All notable changes to Kandev.
 - remove unnecessary files
 
 ## 0.0.10 - 2026-02-24
-
-### Bug Fixes
-
-- enforce sidebar max-width via dockview group constraints ([#274](https://github.com/kdlbs/kandev/pull/274))
-- resolve all web app ESLint linter warnings ([#246](https://github.com/kdlbs/kandev/pull/246))
-- resolve all backend golangci-lint violations ([#245](https://github.com/kdlbs/kandev/pull/245))
-
-### Documentation
-
-- add github integration (pr watcher) ([#262](https://github.com/kdlbs/kandev/pull/262))
-- update and review main documentation ([#259](https://github.com/kdlbs/kandev/pull/259))
 
 ### Features
 
@@ -203,9 +198,20 @@ All notable changes to Kandev.
 - improve stepper ([#229](https://github.com/kdlbs/kandev/pull/229))
 - improve workflows ([#228](https://github.com/kdlbs/kandev/pull/228))
 
+### Bug Fixes
+
+- enforce sidebar max-width via dockview group constraints ([#274](https://github.com/kdlbs/kandev/pull/274))
+- resolve all web app ESLint linter warnings ([#246](https://github.com/kdlbs/kandev/pull/246))
+- resolve all backend golangci-lint violations ([#245](https://github.com/kdlbs/kandev/pull/245))
+
 ### Performance
 
 - optimize settings page load ([#268](https://github.com/kdlbs/kandev/pull/268))
+
+### Documentation
+
+- add github integration (pr watcher) ([#262](https://github.com/kdlbs/kandev/pull/262))
+- update and review main documentation ([#259](https://github.com/kdlbs/kandev/pull/259))
 
 ### Style
 
@@ -225,13 +231,13 @@ All notable changes to Kandev.
 
 ## 0.0.7 - 2026-02-16
 
-### Bug Fixes
-
-- bundle web assets
-
 ### Features
 
 - improved stats ([#227](https://github.com/kdlbs/kandev/pull/227))
+
+### Bug Fixes
+
+- bundle web assets
 
 ## 0.0.6 - 2026-02-16
 
@@ -243,15 +249,15 @@ All notable changes to Kandev.
 
 ## 0.0.4 - 2026-02-16
 
-### Bug Fixes
-
-- bundle
-
 ### Features
 
 - use tar for bundles
 - use tar for bundles
 - improve editors ([#226](https://github.com/kdlbs/kandev/pull/226))
+
+### Bug Fixes
+
+- bundle
 
 ## 0.0.3 - 2026-02-15
 
@@ -261,106 +267,17 @@ All notable changes to Kandev.
 
 ## 0.0.2 - 2026-02-15
 
-### Bug Fixes
-
-- sha lowercase comparison
-- github release download when github token is present
-
 ### Features
 
 - improve windows support
 - fix cli org
 
-## 0.0.1 - 2026-02-15
-
 ### Bug Fixes
 
-- resolve session stuck issues and workflow transition bugs ([#206](https://github.com/kdlbs/kandev/pull/206))
-- copilot mcp ([#217](https://github.com/kdlbs/kandev/pull/217))
-- complete tool calls on turn end ([#216](https://github.com/kdlbs/kandev/pull/216))
-- start ws disconnected
-- make start without public folder
-- 2 cumulative diff
-- cumulative diff poll
-- pass MCP configuration to Claude Code via --mcp-config flag ([#205](https://github.com/kdlbs/kandev/pull/205))
-- prevent user shell terminals from prematurely completing agent tasks ([#199](https://github.com/kdlbs/kandev/pull/199))
-- refetch git status when switching back to a previously viewed task ([#198](https://github.com/kdlbs/kandev/pull/198))
-- resume failed task sessions instead of returning errors ([#197](https://github.com/kdlbs/kandev/pull/197))
-- cancel button always disabled when agent is running ([#195](https://github.com/kdlbs/kandev/pull/195))
-- diff bg lines and codex last message ([#186](https://github.com/kdlbs/kandev/pull/186))
-- prevent duplicate agent messages in database ([#181](https://github.com/kdlbs/kandev/pull/181))
-- prevent duplicate message submission while agent is working ([#180](https://github.com/kdlbs/kandev/pull/180))
-- resolve notification ordering race condition ([#179](https://github.com/kdlbs/kandev/pull/179))
-- use detached context for ask_user_question MCP tool ([#178](https://github.com/kdlbs/kandev/pull/178))
-- rollback from review step works on simple boards ([#177](https://github.com/kdlbs/kandev/pull/177))
-- wire permission handler to Copilot SDK ([#161](https://github.com/kdlbs/kandev/pull/161))
-- workaround shiki Go grammar catastrophic backtracking ([#174](https://github.com/kdlbs/kandev/pull/174))
-- db path + open workspace folder ([#169](https://github.com/kdlbs/kandev/pull/169))
-- agent profile creation ([#170](https://github.com/kdlbs/kandev/pull/170))
-- show approve button wrongly + improve plan ux ([#158](https://github.com/kdlbs/kandev/pull/158))
-- git status tracking - detect staging changes and persist in snapshots ([#149](https://github.com/kdlbs/kandev/pull/149))
-- hide 'Approval Required' badge when agent is working ([#148](https://github.com/kdlbs/kandev/pull/148))
-- disable Cmd+Enter keyboard shortcut when chat input is disabled ([#146](https://github.com/kdlbs/kandev/pull/146))
-- prevent workflow step regression on follow-up prompts ([#143](https://github.com/kdlbs/kandev/pull/143))
-- Update session/task states when ask_user_question tool is used ([#142](https://github.com/kdlbs/kandev/pull/142))
-- Fix cache keying bug and repository locks memory leak ([#138](https://github.com/kdlbs/kandev/pull/138))
-- permission request ID mismatch, SSE duplicates, and subprocess cleanup ([#137](https://github.com/kdlbs/kandev/pull/137))
-- improve ask_user_question MCP tool with clear options format ([#125](https://github.com/kdlbs/kandev/pull/125))
-- session recovery after backend restart ([#126](https://github.com/kdlbs/kandev/pull/126))
-- use correct sandbox_mode to enable file editing ([#129](https://github.com/kdlbs/kandev/pull/129))
-- Multiple bug fixes for agent lifecycle and task creation ([#122](https://github.com/kdlbs/kandev/pull/122))
-- WebSocket race condition in session hooks and chat input performance ([#119](https://github.com/kdlbs/kandev/pull/119))
-- prevent approval button showing while agent is working ([#117](https://github.com/kdlbs/kandev/pull/117))
-- fix alignment in board creation ([#112](https://github.com/kdlbs/kandev/pull/112))
-- refetch messages and git status when switching between tasks ([#110](https://github.com/kdlbs/kandev/pull/110))
-- prevent WebSocket timeout from canceling long-running agent operations ([#109](https://github.com/kdlbs/kandev/pull/109))
-- synchronous event bus dispatch with regression tests ([#106](https://github.com/kdlbs/kandev/pull/106))
-- git status not showing after page refresh ([#101](https://github.com/kdlbs/kandev/pull/101))
-- increase prompt timeout to 60min, add error feedback, rename acp to agent API ([#97](https://github.com/kdlbs/kandev/pull/97))
-- strip origin/ prefix from base branch for rebase/merge operations ([#94](https://github.com/kdlbs/kandev/pull/94))
-- filter upstream commits, fix ahead/behind, and remove duplicate types ([#91](https://github.com/kdlbs/kandev/pull/91))
-- model selector ([#90](https://github.com/kdlbs/kandev/pull/90))
-- load most recent messages and fix lazy loading pagination ([#82](https://github.com/kdlbs/kandev/pull/82))
-- use AGENTCTL_PORT env var for backend ControlClient ([#63](https://github.com/kdlbs/kandev/pull/63))
-- bind KANDEV_AGENT_STANDALONE_PORT env var to config ([#61](https://github.com/kdlbs/kandev/pull/61))
-- refactor shell streaming to use event bus pattern ([#50](https://github.com/kdlbs/kandev/pull/50))
-- make Codex Prompt() synchronous to fix premature task state transition ([#35](https://github.com/kdlbs/kandev/pull/35))
-- session state after restart
-- improve session terminal and git status handling ([#34](https://github.com/kdlbs/kandev/pull/34))
-- make dev ctrl+c cleanup
-- remove extra state transitions during startup resume
-- skip tool call update when no active session
-- resolve deadlock in adapter by not holding mutex during RPC calls
-- typescript errors
-- address code review issues ([#16](https://github.com/kdlbs/kandev/pull/16))
-- docker cleanup
-- macos launcher
-- standalone mode workspace path and worktree lookup ([#10](https://github.com/kdlbs/kandev/pull/10))
-- go vet ci
-- reconnect to agent streams after backend restart
-- show worktree path in UI after agent starts
-- only show active worktrees in task API response
-- configure git safe.directory in agent containers
-- mount entire .git directory for worktree support in containers
-- mount git worktree metadata directory into container
-- wire worktree manager to lifecycle manager for agent isolation
-- recover agent state from Docker on backend restart
-- filter out internal ACP messages from WebSocket broadcast
-- fix real-time comments not appearing on first agent start
-- go tests
-- task page
-- workspace migration
-- Structure session_info event correctly for protocol.Message parsing
-- Publish session_info event so session ID is stored in task metadata
-- build
-- publish session notifications to event bus for WebSocket streaming
-- web linter issues
+- sha lowercase comparison
+- github release download when github token is present
 
-### Documentation
-
-- update WEBSOCKET_API.md with complete API reference
-- Update AGENTS.md for WebSocket-only architecture
-- Add comprehensive WebSocket API reference
+## 0.0.1 - 2026-02-15
 
 ### Features
 
@@ -562,11 +479,88 @@ All notable changes to Kandev.
 - add build orchestration and architecture documentation ([#1](https://github.com/kdlbs/kandev/pull/1))
 - web app init
 
-### Fix
+### Bug Fixes
 
-- Handle untracked and new files in git discard operation ([#168](https://github.com/kdlbs/kandev/pull/168))
-- Persist plan notification state across page refreshes ([#150](https://github.com/kdlbs/kandev/pull/150))
-- Approval button not showing when navigating between sessions ([#116](https://github.com/kdlbs/kandev/pull/116))
+- resolve session stuck issues and workflow transition bugs ([#206](https://github.com/kdlbs/kandev/pull/206))
+- copilot mcp ([#217](https://github.com/kdlbs/kandev/pull/217))
+- complete tool calls on turn end ([#216](https://github.com/kdlbs/kandev/pull/216))
+- start ws disconnected
+- make start without public folder
+- 2 cumulative diff
+- cumulative diff poll
+- pass MCP configuration to Claude Code via --mcp-config flag ([#205](https://github.com/kdlbs/kandev/pull/205))
+- prevent user shell terminals from prematurely completing agent tasks ([#199](https://github.com/kdlbs/kandev/pull/199))
+- refetch git status when switching back to a previously viewed task ([#198](https://github.com/kdlbs/kandev/pull/198))
+- resume failed task sessions instead of returning errors ([#197](https://github.com/kdlbs/kandev/pull/197))
+- cancel button always disabled when agent is running ([#195](https://github.com/kdlbs/kandev/pull/195))
+- diff bg lines and codex last message ([#186](https://github.com/kdlbs/kandev/pull/186))
+- prevent duplicate agent messages in database ([#181](https://github.com/kdlbs/kandev/pull/181))
+- prevent duplicate message submission while agent is working ([#180](https://github.com/kdlbs/kandev/pull/180))
+- resolve notification ordering race condition ([#179](https://github.com/kdlbs/kandev/pull/179))
+- use detached context for ask_user_question MCP tool ([#178](https://github.com/kdlbs/kandev/pull/178))
+- rollback from review step works on simple boards ([#177](https://github.com/kdlbs/kandev/pull/177))
+- wire permission handler to Copilot SDK ([#161](https://github.com/kdlbs/kandev/pull/161))
+- workaround shiki Go grammar catastrophic backtracking ([#174](https://github.com/kdlbs/kandev/pull/174))
+- db path + open workspace folder ([#169](https://github.com/kdlbs/kandev/pull/169))
+- agent profile creation ([#170](https://github.com/kdlbs/kandev/pull/170))
+- show approve button wrongly + improve plan ux ([#158](https://github.com/kdlbs/kandev/pull/158))
+- git status tracking - detect staging changes and persist in snapshots ([#149](https://github.com/kdlbs/kandev/pull/149))
+- hide 'Approval Required' badge when agent is working ([#148](https://github.com/kdlbs/kandev/pull/148))
+- disable Cmd+Enter keyboard shortcut when chat input is disabled ([#146](https://github.com/kdlbs/kandev/pull/146))
+- prevent workflow step regression on follow-up prompts ([#143](https://github.com/kdlbs/kandev/pull/143))
+- Update session/task states when ask_user_question tool is used ([#142](https://github.com/kdlbs/kandev/pull/142))
+- Fix cache keying bug and repository locks memory leak ([#138](https://github.com/kdlbs/kandev/pull/138))
+- permission request ID mismatch, SSE duplicates, and subprocess cleanup ([#137](https://github.com/kdlbs/kandev/pull/137))
+- improve ask_user_question MCP tool with clear options format ([#125](https://github.com/kdlbs/kandev/pull/125))
+- session recovery after backend restart ([#126](https://github.com/kdlbs/kandev/pull/126))
+- use correct sandbox_mode to enable file editing ([#129](https://github.com/kdlbs/kandev/pull/129))
+- Multiple bug fixes for agent lifecycle and task creation ([#122](https://github.com/kdlbs/kandev/pull/122))
+- WebSocket race condition in session hooks and chat input performance ([#119](https://github.com/kdlbs/kandev/pull/119))
+- prevent approval button showing while agent is working ([#117](https://github.com/kdlbs/kandev/pull/117))
+- fix alignment in board creation ([#112](https://github.com/kdlbs/kandev/pull/112))
+- refetch messages and git status when switching between tasks ([#110](https://github.com/kdlbs/kandev/pull/110))
+- prevent WebSocket timeout from canceling long-running agent operations ([#109](https://github.com/kdlbs/kandev/pull/109))
+- synchronous event bus dispatch with regression tests ([#106](https://github.com/kdlbs/kandev/pull/106))
+- git status not showing after page refresh ([#101](https://github.com/kdlbs/kandev/pull/101))
+- increase prompt timeout to 60min, add error feedback, rename acp to agent API ([#97](https://github.com/kdlbs/kandev/pull/97))
+- strip origin/ prefix from base branch for rebase/merge operations ([#94](https://github.com/kdlbs/kandev/pull/94))
+- filter upstream commits, fix ahead/behind, and remove duplicate types ([#91](https://github.com/kdlbs/kandev/pull/91))
+- model selector ([#90](https://github.com/kdlbs/kandev/pull/90))
+- load most recent messages and fix lazy loading pagination ([#82](https://github.com/kdlbs/kandev/pull/82))
+- use AGENTCTL_PORT env var for backend ControlClient ([#63](https://github.com/kdlbs/kandev/pull/63))
+- bind KANDEV_AGENT_STANDALONE_PORT env var to config ([#61](https://github.com/kdlbs/kandev/pull/61))
+- refactor shell streaming to use event bus pattern ([#50](https://github.com/kdlbs/kandev/pull/50))
+- make Codex Prompt() synchronous to fix premature task state transition ([#35](https://github.com/kdlbs/kandev/pull/35))
+- session state after restart
+- improve session terminal and git status handling ([#34](https://github.com/kdlbs/kandev/pull/34))
+- make dev ctrl+c cleanup
+- remove extra state transitions during startup resume
+- skip tool call update when no active session
+- resolve deadlock in adapter by not holding mutex during RPC calls
+- typescript errors
+- address code review issues ([#16](https://github.com/kdlbs/kandev/pull/16))
+- docker cleanup
+- macos launcher
+- standalone mode workspace path and worktree lookup ([#10](https://github.com/kdlbs/kandev/pull/10))
+- go vet ci
+- reconnect to agent streams after backend restart
+- show worktree path in UI after agent starts
+- only show active worktrees in task API response
+- configure git safe.directory in agent containers
+- mount entire .git directory for worktree support in containers
+- mount git worktree metadata directory into container
+- wire worktree manager to lifecycle manager for agent isolation
+- recover agent state from Docker on backend restart
+- filter out internal ACP messages from WebSocket broadcast
+- fix real-time comments not appearing on first agent start
+- go tests
+- task page
+- workspace migration
+- Structure session_info event correctly for protocol.Message parsing
+- Publish session_info event so session ID is stored in task metadata
+- build
+- publish session notifications to event bus for WebSocket streaming
+- web linter issues
 
 ### Refactoring
 
@@ -582,6 +576,18 @@ All notable changes to Kandev.
 - unify configuration and remove single-instance mode ([#18](https://github.com/kdlbs/kandev/pull/18))
 - unify WebSocket patterns to Pattern A (handlers + controller + dto)
 - Replace REST API with WebSocket-only architecture
+
+### Documentation
+
+- update WEBSOCKET_API.md with complete API reference
+- Update AGENTS.md for WebSocket-only architecture
+- Add comprehensive WebSocket API reference
+
+### Fix
+
+- Handle untracked and new files in git discard operation ([#168](https://github.com/kdlbs/kandev/pull/168))
+- Persist plan notification state across page refreshes ([#150](https://github.com/kdlbs/kandev/pull/150))
+- Approval button not showing when navigating between sessions ([#116](https://github.com/kdlbs/kandev/pull/116))
 
 ### Build
 
