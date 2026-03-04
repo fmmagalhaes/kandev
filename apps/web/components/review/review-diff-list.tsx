@@ -334,8 +334,9 @@ function FileDiffSection({
               enableAcceptReject
               onRevertBlock={handleRevertBlock}
               sessionId={sessionId}
-              hideHeader
               wordWrap={wordWrap}
+              enableExpansion={true}
+              baseRef="HEAD"
             />
           </div>
         ) : (

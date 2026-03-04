@@ -126,7 +126,12 @@ const CommitDetailPanel = memo(function CommitDetailPanel({
         <div className="p-3">
           {commit && <CommitHeader commit={commit} commitSha={commitSha} />}
         </div>
-        <CommitFileList fileEntries={fileEntries} loading={loading} onOpenFile={openFile} />
+        <CommitFileList
+          fileEntries={fileEntries}
+          loading={loading}
+          onOpenFile={openFile}
+          baseRef={`${commitSha}^`}
+        />
       </PanelBody>
     </PanelRoot>
   );
@@ -168,16 +173,19 @@ function CommitFileList({
   fileEntries,
   loading,
   onOpenFile,
+  baseRef,
 }: {
   fileEntries: [string, FileInfo][];
   loading: boolean;
   onOpenFile: (path: string) => void;
+  baseRef: string;
 }) {
   if (fileEntries.length === 0 && !loading) {
     return (
       <div className="text-sm text-muted-foreground text-center py-8">No files in this commit</div>
     );
   }
+
   return (
     <>
       {fileEntries.map(([path, file]) => (
@@ -188,6 +196,8 @@ function CommitFileList({
               diff={file.diff}
               status={file.status}
               onOpenFile={onOpenFile}
+              enableExpansion={true}
+              baseRef={baseRef}
             />
           ) : (
             <div className="px-3 py-2 text-xs text-muted-foreground">
