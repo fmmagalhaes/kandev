@@ -341,14 +341,33 @@ func (s *Service) ArchiveTask(ctx context.Context, id string) error {
 
 	// 2. Gather data needed for cleanup BEFORE archive
 	var stopTargets []taskStopTarget
+	activeSessions, err := s.sessions.ListActiveTaskSessionsByTaskID(ctx, id)
+	if err != nil {
+		s.logger.Warn("failed to list active sessions for archive",
+			zap.String("task_id", id),
+			zap.Error(err))
+	}
 	if s.executionStopper != nil {
-		activeSessions, err := s.sessions.ListActiveTaskSessionsByTaskID(ctx, id)
-		if err != nil {
-			s.logger.Warn("failed to list active sessions for archive",
-				zap.String("task_id", id),
-				zap.Error(err))
-		}
 		stopTargets = s.buildStopTargets(ctx, id, activeSessions)
+	}
+
+	// 2b. Capture git archive snapshot for active sessions BEFORE stopping agents
+	// Use a bounded timeout to prevent blocking the archive operation if agentctl is stuck.
+	if s.gitArchiveCapture != nil && len(activeSessions) > 0 {
+		for _, sess := range activeSessions {
+			if sess == nil || sess.ID == "" {
+				continue
+			}
+			snapCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			err := s.gitArchiveCapture.CaptureArchiveSnapshot(snapCtx, sess.ID)
+			cancel()
+			if err != nil {
+				s.logger.Warn("failed to capture git archive snapshot",
+					zap.String("task_id", id),
+					zap.String("session_id", sess.ID),
+					zap.Error(err))
+			}
+		}
 	}
 
 	sessions, err := s.sessions.ListTaskSessions(ctx, id)

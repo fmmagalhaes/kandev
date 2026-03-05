@@ -11,6 +11,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/kandev/kandev/internal/agentctl/client"
 	"github.com/kandev/kandev/internal/events"
 	"github.com/kandev/kandev/internal/events/bus"
 	"github.com/kandev/kandev/internal/orchestrator/dto"
@@ -996,6 +997,148 @@ func (s *Service) StopExecution(ctx context.Context, executionID string, reason 
 		zap.String("reason", reason),
 		zap.Bool("force", force))
 	return s.executor.StopExecution(ctx, executionID, reason, force)
+}
+
+// CaptureArchiveSnapshot captures git state (commits, cumulative diff) for a session before archiving.
+// This preserves the final git state for historical purposes.
+func (s *Service) CaptureArchiveSnapshot(ctx context.Context, sessionID string) error {
+	s.logger.Info("capturing archive snapshot", zap.String("session_id", sessionID))
+
+	baseCommit, err := s.resolveArchiveBaseCommit(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	if baseCommit == "" {
+		s.logger.Debug("no base_commit available, skipping archive snapshot capture",
+			zap.String("session_id", sessionID))
+		return nil
+	}
+
+	if !s.captureArchiveCommits(ctx, sessionID, baseCommit) {
+		// Agent not running, skip diff capture as well
+		return nil
+	}
+
+	s.captureArchiveDiff(ctx, sessionID, baseCommit)
+	return nil
+}
+
+// resolveArchiveBaseCommit retrieves the base commit for archive snapshot capture.
+// It first checks the session's stored base_commit_sha, falling back to git status if empty.
+func (s *Service) resolveArchiveBaseCommit(ctx context.Context, sessionID string) (string, error) {
+	session, err := s.repo.GetTaskSession(ctx, sessionID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get session: %w", err)
+	}
+
+	if session.BaseCommitSHA != "" {
+		return session.BaseCommitSHA, nil
+	}
+
+	// Fallback: try to get base commit from git status for legacy sessions
+	status, err := s.agentManager.GetGitStatus(ctx, sessionID)
+	if err != nil {
+		s.logger.Debug("failed to get git status for base commit fallback",
+			zap.String("session_id", sessionID),
+			zap.Error(err))
+		return "", nil
+	}
+	if status != nil && status.BaseCommit != "" {
+		s.logger.Debug("using git status base commit as fallback for archive",
+			zap.String("session_id", sessionID),
+			zap.String("base_commit", status.BaseCommit))
+		return status.BaseCommit, nil
+	}
+	return "", nil
+}
+
+// captureArchiveCommits fetches and saves commits from baseCommit to HEAD.
+// Returns false if the agent is not running (caller should skip remaining capture).
+func (s *Service) captureArchiveCommits(ctx context.Context, sessionID, baseCommit string) bool {
+	logResult, err := s.agentManager.GetGitLog(ctx, sessionID, baseCommit, 0) // 0 = no limit
+	if err != nil {
+		s.logger.Warn("failed to capture git log for archive",
+			zap.String("session_id", sessionID),
+			zap.Error(err))
+		return true // Continue with diff capture even if log fails
+	}
+	if logResult == nil {
+		s.logger.Debug("agent not running, skipping archive snapshot capture",
+			zap.String("session_id", sessionID))
+		return false
+	}
+	if logResult.Success && len(logResult.Commits) > 0 {
+		s.saveArchiveCommits(ctx, sessionID, logResult.Commits)
+	}
+	return true
+}
+
+// captureArchiveDiff fetches and saves the cumulative diff from baseCommit to HEAD.
+func (s *Service) captureArchiveDiff(ctx context.Context, sessionID, baseCommit string) {
+	diffResult, err := s.agentManager.GetCumulativeDiff(ctx, sessionID, baseCommit)
+	if err != nil {
+		s.logger.Warn("failed to capture cumulative diff for archive",
+			zap.String("session_id", sessionID),
+			zap.Error(err))
+		return
+	}
+	if diffResult == nil || !diffResult.Success {
+		return
+	}
+
+	if err := s.repo.CreateGitSnapshot(ctx, &models.GitSnapshot{
+		SessionID:    sessionID,
+		SnapshotType: models.SnapshotTypeArchive,
+		HeadCommit:   diffResult.HeadCommit,
+		BaseCommit:   diffResult.BaseCommit,
+		Files:        diffResult.Files,
+	}); err != nil {
+		s.logger.Warn("failed to save archive snapshot",
+			zap.String("session_id", sessionID),
+			zap.Error(err))
+		return
+	}
+
+	s.logger.Debug("saved archive snapshot",
+		zap.String("session_id", sessionID),
+		zap.String("head_commit", diffResult.HeadCommit),
+		zap.Int("total_commits", diffResult.TotalCommits))
+}
+
+// parseCommitTime parses a commit timestamp from git log output.
+// Returns UTC time to ensure consistent timestamps across environments.
+func parseCommitTime(s string) time.Time {
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		return time.Now().UTC()
+	}
+	return t.UTC()
+}
+
+// saveArchiveCommits persists commits to the database for archive purposes.
+func (s *Service) saveArchiveCommits(ctx context.Context, sessionID string, commits []*client.GitCommitInfo) {
+	for _, commit := range commits {
+		if err := s.repo.CreateSessionCommit(ctx, &models.SessionCommit{
+			SessionID:     sessionID,
+			CommitSHA:     commit.CommitSHA,
+			ParentSHA:     commit.ParentSHA,
+			AuthorName:    commit.AuthorName,
+			AuthorEmail:   commit.AuthorEmail,
+			CommitMessage: commit.CommitMessage,
+			CommittedAt:   parseCommitTime(commit.CommittedAt),
+			FilesChanged:  commit.FilesChanged,
+			Insertions:    commit.Insertions,
+			Deletions:     commit.Deletions,
+		}); err != nil {
+			s.logger.Warn("failed to save commit for archive",
+				zap.String("session_id", sessionID),
+				zap.String("commit_sha", commit.CommitSHA),
+				zap.Error(err))
+		}
+	}
+	s.logger.Debug("saved archive commits",
+		zap.String("session_id", sessionID),
+		zap.Int("count", len(commits)))
 }
 
 // PromptTask sends a follow-up prompt to a running agent for a task session.

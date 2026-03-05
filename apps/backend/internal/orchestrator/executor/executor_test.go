@@ -3,10 +3,12 @@ package executor
 import (
 	"context"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/kandev/kandev/internal/agentctl/client"
 	"github.com/kandev/kandev/internal/common/logger"
 	"github.com/kandev/kandev/internal/task/models"
 	v1 "github.com/kandev/kandev/pkg/api/v1"
@@ -113,8 +115,31 @@ func (m *mockAgentManager) ResolveAgentProfile(ctx context.Context, profileID st
 	}, nil
 }
 
+func (m *mockAgentManager) GetGitLog(ctx context.Context, sessionID, baseCommit string, limit int) (*client.GitLogResult, error) {
+	return nil, nil
+}
+
+func (m *mockAgentManager) GetCumulativeDiff(ctx context.Context, sessionID, baseCommit string) (*client.CumulativeDiffResult, error) {
+	return nil, nil
+}
+
+func (m *mockAgentManager) GetGitStatus(ctx context.Context, sessionID string) (*client.GitStatusResult, error) {
+	// Return a mock git status with a head commit for base commit capture
+	return &client.GitStatusResult{
+		Success:    true,
+		Branch:     "main",
+		HeadCommit: "abc123def456",
+	}, nil
+}
+
+func (m *mockAgentManager) WaitForAgentctlReady(ctx context.Context, sessionID string) error {
+	// Mock returns immediately
+	return nil
+}
+
 // mockRepository implements executorStore for testing
 type mockRepository struct {
+	mu               sync.Mutex
 	sessions         map[string]*models.TaskSession
 	taskRepositories map[string]*models.TaskRepository
 	repositories     map[string]*models.Repository
@@ -155,12 +180,16 @@ func (m *mockRepository) GetRepository(ctx context.Context, id string) (*models.
 }
 
 func (m *mockRepository) CreateTaskSession(ctx context.Context, session *models.TaskSession) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.createTaskSessionCalls = append(m.createTaskSessionCalls, session)
 	m.sessions[session.ID] = session
 	return nil
 }
 
 func (m *mockRepository) GetTaskSession(ctx context.Context, id string) (*models.TaskSession, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if session, ok := m.sessions[id]; ok {
 		return session, nil
 	}
@@ -168,20 +197,35 @@ func (m *mockRepository) GetTaskSession(ctx context.Context, id string) (*models
 }
 
 func (m *mockRepository) UpdateTaskSession(ctx context.Context, session *models.TaskSession) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.updateTaskSessionCalls = append(m.updateTaskSessionCalls, session)
 	m.sessions[session.ID] = session
 	return nil
 }
 
 func (m *mockRepository) SetSessionPrimary(ctx context.Context, sessionID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.setSessionPrimaryCalls = append(m.setSessionPrimaryCalls, sessionID)
 	return nil
 }
 
 func (m *mockRepository) UpdateTaskSessionState(ctx context.Context, sessionID string, state models.TaskSessionState, errorMessage string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if session, ok := m.sessions[sessionID]; ok {
 		session.State = state
 		session.ErrorMessage = errorMessage
+	}
+	return nil
+}
+
+func (m *mockRepository) UpdateTaskSessionBaseCommit(ctx context.Context, sessionID string, baseCommitSHA string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if session, ok := m.sessions[sessionID]; ok {
+		session.BaseCommitSHA = baseCommitSHA
 	}
 	return nil
 }

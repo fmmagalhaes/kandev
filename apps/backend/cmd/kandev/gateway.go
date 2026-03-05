@@ -43,6 +43,29 @@ func (a *scriptServiceAdapter) GetRepositoryScript(ctx context.Context, id strin
 	}, nil
 }
 
+// sessionReaderAdapter implements agenthandlers.SessionReader using the task repository.
+// This allows git handlers to look up session metadata (like base commit SHA) from the database.
+type sessionReaderAdapter struct {
+	repo   *sqliterepo.Repository
+	logger *logger.Logger
+}
+
+func (a *sessionReaderAdapter) GetSessionBaseCommit(ctx context.Context, sessionID string) string {
+	session, err := a.repo.GetTaskSession(ctx, sessionID)
+	if err != nil {
+		if a.logger != nil {
+			a.logger.Warn("failed to load session for base commit lookup",
+				zap.String("session_id", sessionID),
+				zap.Error(err))
+		}
+		return ""
+	}
+	if session == nil {
+		return ""
+	}
+	return session.BaseCommitSHA
+}
+
 func provideGateway(
 	ctx context.Context,
 	log *logger.Logger,
@@ -87,7 +110,7 @@ func provideGateway(
 		shellHandlers := agenthandlers.NewShellHandlers(lifecycleMgr, scriptSvc, log)
 		shellHandlers.RegisterHandlers(gateway.Dispatcher)
 
-		gitHandlers := agenthandlers.NewGitHandlers(lifecycleMgr, log)
+		gitHandlers := agenthandlers.NewGitHandlers(lifecycleMgr, &sessionReaderAdapter{repo: taskRepo, logger: log}, log)
 		if githubSvc != nil {
 			gitHandlers.SetOnPRCreated(func(ctx context.Context, sessionID, taskID, prURL, branch string) {
 				githubSvc.AssociatePRByURL(ctx, sessionID, taskID, prURL, branch)
