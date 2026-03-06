@@ -2,6 +2,17 @@
 
 All notable changes to Kandev.
 
+## 0.17 - 2026-03-06
+
+### Features
+
+- enable native session resume with ACP session/load ([#380](https://github.com/kdlbs/kandev/pull/380))
+
+### Bug Fixes
+
+- remove conflicting node user before creating kandev user ([#385](https://github.com/kdlbs/kandev/pull/385))
+- use merge-base instead of HEAD for session base commit ([#382](https://github.com/kdlbs/kandev/pull/382))
+
 ## 0.16 - 2026-03-06
 
 ### Features
