@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -8,6 +9,7 @@ import (
 	"github.com/kandev/kandev/internal/common/logger"
 	"github.com/kandev/kandev/internal/notifications/controller"
 	"github.com/kandev/kandev/internal/notifications/dto"
+	"github.com/kandev/kandev/internal/notifications/service"
 	"go.uber.org/zap"
 )
 
@@ -26,6 +28,7 @@ func RegisterRoutes(router *gin.Engine, ctrl *controller.Controller, log *logger
 	api.POST("/notification-providers", h.httpCreateProvider)
 	api.PATCH("/notification-providers/:id", h.httpUpdateProvider)
 	api.DELETE("/notification-providers/:id", h.httpDeleteProvider)
+	api.POST("/notification-providers/:id/test", h.httpTestProvider)
 }
 
 func (h *Handlers) httpListProviders(c *gin.Context) {
@@ -67,6 +70,20 @@ func (h *Handlers) httpUpdateProvider(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, resp)
+}
+
+func (h *Handlers) httpTestProvider(c *gin.Context) {
+	providerID := c.Param("id")
+	if err := h.controller.TestProvider(c.Request.Context(), providerID); err != nil {
+		if errors.Is(err, service.ErrProviderNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "provider not found"})
+			return
+		}
+		h.logger.Error("test notification failed", zap.String("provider_id", providerID), zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to send test notification"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
 func (h *Handlers) httpDeleteProvider(c *gin.Context) {
