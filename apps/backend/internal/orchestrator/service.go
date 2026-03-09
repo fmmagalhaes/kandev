@@ -105,7 +105,6 @@ type repoStore interface {
 	GetPrimaryTaskRepository(ctx context.Context, taskID string) (*models.TaskRepository, error)
 	CreateTaskSession(ctx context.Context, session *models.TaskSession) error
 	UpdateTaskSession(ctx context.Context, session *models.TaskSession) error
-	UpdateTaskSessionBaseCommit(ctx context.Context, id string, baseCommitSHA string) error
 	SetSessionPrimary(ctx context.Context, sessionID string) error
 	ListActiveTaskSessions(ctx context.Context) ([]*models.TaskSession, error)
 	ListActiveTaskSessionsByTaskID(ctx context.Context, taskID string) ([]*models.TaskSession, error)
@@ -121,6 +120,7 @@ type sessionExecutorStore interface {
 	GetTaskSession(ctx context.Context, id string) (*models.TaskSession, error)
 	UpdateTaskSession(ctx context.Context, session *models.TaskSession) error
 	UpdateTaskSessionState(ctx context.Context, id string, state models.TaskSessionState, errorMessage string) error
+	UpdateTaskSessionBaseCommit(ctx context.Context, id string, baseCommitSHA string) error
 	ClearSessionExecutionID(ctx context.Context, id string) error
 	UpdateSessionWorkflowStep(ctx context.Context, sessionID string, stepID string) error
 	UpdateSessionReviewStatus(ctx context.Context, sessionID string, status string) error

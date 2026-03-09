@@ -20,15 +20,17 @@ func (wt *WorkspaceTracker) pollGitChanges(ctx context.Context) {
 	ticker := time.NewTicker(wt.gitPollInterval)
 	defer ticker.Stop()
 
-	// Initialize cached HEAD SHA and index hash
+	// Initialize cached HEAD SHA, branch name, and index hash
 	wt.gitStateMu.Lock()
 	wt.cachedHeadSHA = wt.getHeadSHA(ctx)
+	wt.cachedBranchName = wt.getCurrentBranchName(ctx)
 	wt.cachedIndexHash = wt.getGitStatusHash(ctx)
 	wt.gitStateMu.Unlock()
 
 	wt.logger.Info("git polling started",
 		zap.Duration("interval", wt.gitPollInterval),
-		zap.String("initial_head", wt.cachedHeadSHA))
+		zap.String("initial_head", wt.cachedHeadSHA),
+		zap.String("initial_branch", wt.cachedBranchName))
 
 	for {
 		select {
@@ -45,6 +47,18 @@ func (wt *WorkspaceTracker) pollGitChanges(ctx context.Context) {
 // getHeadSHA returns the current HEAD commit SHA
 func (wt *WorkspaceTracker) getHeadSHA(ctx context.Context) string {
 	cmd := exec.CommandContext(ctx, "git", "rev-parse", "HEAD")
+	cmd.Dir = wt.workDir
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// getCurrentBranchName returns the current branch name.
+// Returns empty string if in detached HEAD state (e.g., during rebase or when a commit/tag is checked out).
+func (wt *WorkspaceTracker) getCurrentBranchName(ctx context.Context) string {
+	cmd := exec.CommandContext(ctx, "git", "symbolic-ref", "--short", "-q", "HEAD")
 	cmd.Dir = wt.workDir
 	out, err := cmd.Output()
 	if err != nil {
@@ -70,28 +84,52 @@ func (wt *WorkspaceTracker) getGitStatusHash(ctx context.Context) string {
 // checkGitChanges checks if HEAD or git index has changed and processes changes
 func (wt *WorkspaceTracker) checkGitChanges(ctx context.Context) {
 	currentHead := wt.getHeadSHA(ctx)
+	currentBranch := wt.getCurrentBranchName(ctx)
 	currentIndexHash := wt.getGitStatusHash(ctx)
 
 	wt.gitStateMu.RLock()
 	previousHead := wt.cachedHeadSHA
+	previousBranch := wt.cachedBranchName
 	previousIndexHash := wt.cachedIndexHash
 	wt.gitStateMu.RUnlock()
 
 	headChanged := currentHead != "" && currentHead != previousHead
+	branchChanged := currentBranch != previousBranch // Track all transitions including to/from detached HEAD
 	indexChanged := currentIndexHash != "" && currentIndexHash != previousIndexHash
 
-	// If neither HEAD nor index changed, nothing to do
-	if !headChanged && !indexChanged {
+	// If nothing changed, nothing to do
+	if !headChanged && !branchChanged && !indexChanged {
 		return
 	}
 
 	// Update cached index hash (HEAD will be updated below if it changed)
-	if indexChanged && !headChanged {
+	if indexChanged && !headChanged && !branchChanged {
 		wt.gitStateMu.Lock()
 		wt.cachedIndexHash = currentIndexHash
 		wt.gitStateMu.Unlock()
 
 		wt.logger.Debug("git index changed (staging/unstaging detected)")
+		wt.updateGitStatus(ctx)
+		return
+	}
+
+	// Branch changed without HEAD change - this can happen when:
+	// 1. Switching between branches that point to the same commit
+	// 2. Transitioning to/from detached HEAD state (git switch --detach, rebase end)
+	if branchChanged && !headChanged {
+		wt.gitStateMu.Lock()
+		wt.cachedBranchName = currentBranch
+		wt.cachedIndexHash = currentIndexHash
+		wt.gitStateMu.Unlock()
+
+		// Only handle branch switch if we're not in detached HEAD state
+		// Suppress notification when currentBranch is empty (detached HEAD)
+		if currentBranch != "" {
+			wt.handleBranchSwitch(ctx, previousBranch, currentBranch, currentHead)
+			return
+		}
+
+		// In detached HEAD state, just update git status
 		wt.updateGitStatus(ctx)
 		return
 	}
@@ -105,11 +143,20 @@ func (wt *WorkspaceTracker) checkGitChanges(ctx context.Context) {
 		zap.String("previous", previousHead),
 		zap.String("current", currentHead))
 
-	// Update cached HEAD and index hash
+	// Update cached HEAD, branch, and index hash
 	wt.gitStateMu.Lock()
 	wt.cachedHeadSHA = currentHead
+	wt.cachedBranchName = currentBranch
 	wt.cachedIndexHash = currentIndexHash
 	wt.gitStateMu.Unlock()
+
+	// Check if this is a branch switch (branch name changed)
+	// Branch switches need special handling to update the base commit
+	// Only handle if we're not in detached HEAD state (currentBranch != "")
+	if branchChanged && currentBranch != "" {
+		wt.handleBranchSwitch(ctx, previousBranch, currentBranch, currentHead)
+		return
+	}
 
 	// Check if history was rewritten (reset, rebase, amend, etc.)
 	// There are three cases:
@@ -160,6 +207,80 @@ func (wt *WorkspaceTracker) checkGitChanges(ctx context.Context) {
 
 	// Update and broadcast git status
 	wt.updateGitStatus(ctx)
+}
+
+// handleBranchSwitch handles a branch switch event by calculating the new base commit
+// and notifying subscribers. This allows the session to update its base commit to reflect
+// the new branch's merge-base with the target branch (e.g., main).
+func (wt *WorkspaceTracker) handleBranchSwitch(ctx context.Context, previousBranch, currentBranch, currentHead string) {
+	wt.logger.Info("detected branch switch",
+		zap.String("previous", previousBranch),
+		zap.String("current", currentBranch),
+		zap.String("head", currentHead))
+
+	// Calculate the new base commit for the current branch
+	// Use the sampled currentHead to avoid race conditions
+	baseCommit := wt.getBaseCommitForBranch(ctx, currentBranch, currentHead)
+
+	// Only notify if we successfully resolved a base commit
+	// Skip notification if base commit resolution failed to avoid incomplete updates
+	if baseCommit != "" {
+		wt.notifyWorkspaceStreamBranchSwitch(&types.GitBranchSwitchNotification{
+			Timestamp:      time.Now(),
+			PreviousBranch: previousBranch,
+			CurrentBranch:  currentBranch,
+			CurrentHead:    currentHead,
+			BaseCommit:     baseCommit,
+		})
+	} else {
+		wt.logger.Warn("failed to resolve base commit for branch switch, skipping notification",
+			zap.String("branch", currentBranch))
+	}
+
+	// Update and broadcast git status to reflect the new branch
+	wt.updateGitStatus(ctx)
+}
+
+// getBaseCommitForBranch calculates the base commit (merge-base) for a given branch.
+// This is the common ancestor between the branch and the integration branch (e.g., main).
+// Prioritizes integration branches (origin/main, origin/master, main, master) over upstream
+// to ensure the base commit represents the branch-off point from the main development line.
+// Uses the provided head SHA to avoid race conditions with concurrent git operations.
+func (wt *WorkspaceTracker) getBaseCommitForBranch(ctx context.Context, branch, head string) string {
+	var baseBranch string
+
+	// Try integration branch candidates first (origin/main, origin/master, main, master)
+	// This ensures we get the branch-off point from the main development line
+	for _, candidate := range []string{"origin/main", "origin/master", "main", "master"} {
+		checkCmd := exec.CommandContext(ctx, "git", "rev-parse", "--verify", candidate)
+		checkCmd.Dir = wt.workDir
+		if err := checkCmd.Run(); err == nil {
+			baseBranch = candidate
+			break
+		}
+	}
+
+	// Fall back to upstream tracking branch if no integration branch exists
+	if baseBranch == "" {
+		upstreamCmd := exec.CommandContext(ctx, "git", "rev-parse", "--abbrev-ref", branch+"@{upstream}")
+		upstreamCmd.Dir = wt.workDir
+		upstreamOut, err := upstreamCmd.Output()
+		if err == nil && len(upstreamOut) > 0 {
+			baseBranch = strings.TrimSpace(string(upstreamOut))
+		}
+	}
+
+	// Calculate merge-base if we found a base branch
+	// Use the sampled head SHA instead of live HEAD to avoid race conditions
+	if baseBranch != "" && head != "" {
+		mergeBaseCmd := exec.CommandContext(ctx, "git", "merge-base", baseBranch, head)
+		mergeBaseCmd.Dir = wt.workDir
+		if mergeBaseOut, err := mergeBaseCmd.Output(); err == nil {
+			return strings.TrimSpace(string(mergeBaseOut))
+		}
+	}
+
+	return ""
 }
 
 // isAncestor checks if commit1 is an ancestor of commit2
