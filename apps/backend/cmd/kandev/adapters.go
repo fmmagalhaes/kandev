@@ -213,6 +213,16 @@ func (a *lifecycleAdapter) RestartAgentProcess(ctx context.Context, agentExecuti
 	return a.mgr.RestartAgentProcess(ctx, agentExecutionID)
 }
 
+// ResetAgentContext resets the agent's context using the fastest available strategy.
+func (a *lifecycleAdapter) ResetAgentContext(ctx context.Context, agentExecutionID string) error {
+	return a.mgr.ResetAgentContext(ctx, agentExecutionID)
+}
+
+// SetSessionModelBySessionID attempts an in-place model switch via ACP session/set_model.
+func (a *lifecycleAdapter) SetSessionModelBySessionID(ctx context.Context, sessionID, modelID string) error {
+	return a.mgr.SetSessionModelBySessionID(ctx, sessionID, modelID)
+}
+
 // RespondToPermissionBySessionID sends a response to a permission request for a session
 func (a *lifecycleAdapter) RespondToPermissionBySessionID(ctx context.Context, sessionID, pendingID, optionID string, cancelled bool) error {
 	return a.mgr.RespondToPermissionBySessionID(sessionID, pendingID, optionID, cancelled)
@@ -373,7 +383,7 @@ type messageCreatorAdapter struct {
 	logger *logger.Logger
 
 	// sessionModelCache caches the resolved model per session to avoid repeated DB lookups.
-	// The model doesn't change within a session, so caching is safe.
+	// Invalidated via InvalidateModelCache when the model changes (e.g., model switch).
 	sessionModelMu    sync.RWMutex
 	sessionModelCache map[string]string
 }
@@ -405,6 +415,14 @@ func (a *messageCreatorAdapter) getSessionModel(ctx context.Context, sessionID s
 	a.sessionModelMu.Unlock()
 
 	return model
+}
+
+// InvalidateModelCache clears the cached model for a session so the next message
+// re-reads it from the DB. Called after model switches.
+func (a *messageCreatorAdapter) InvalidateModelCache(sessionID string) {
+	a.sessionModelMu.Lock()
+	delete(a.sessionModelCache, sessionID)
+	a.sessionModelMu.Unlock()
 }
 
 // CreateAgentMessage creates a message with author_type="agent"

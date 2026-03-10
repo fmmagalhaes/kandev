@@ -1,17 +1,15 @@
 "use client";
 
+import { useState, useCallback } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@kandev/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { TipTapInput } from "./tiptap-input";
 import { ChatInputFocusHint } from "./chat-input-focus-hint";
 import { ResizeHandle } from "./resize-handle";
-import { TodoSummary } from "./todo-summary";
 import { ChatInputToolbar } from "./chat-input-toolbar";
 import { ContextZone } from "./context-items/context-zone";
 import type { ContextItem } from "@/lib/types/context";
 import type { ContextFile } from "@/lib/state/context-files-store";
-
-type TodoItem = { text: string; done?: boolean };
 
 export type ChatInputEditorAreaProps = {
   inputRef: React.RefObject<import("./tiptap-input").TipTapInputHandle | null>;
@@ -32,7 +30,8 @@ export type ChatInputEditorAreaProps = {
   onToggleContextFile?: (file: ContextFile) => void;
   planContextEnabled: boolean;
   handleAgentCommand: (command: string) => void;
-  handleImagePaste: (files: File[]) => Promise<void>;
+  addFiles: (files: File[]) => Promise<void>;
+  fileInputRef: React.RefObject<HTMLInputElement | null>;
   showRequestChangesTooltip: boolean;
   hideSessionsDropdown?: boolean;
   isAgentBusy: boolean;
@@ -50,71 +49,163 @@ export type ChatInputEditorAreaProps = {
   isEnhancingPrompt?: boolean;
 };
 
-export function ChatInputEditorArea({ inputRef, ...p }: ChatInputEditorAreaProps) {
-  const wrappedSubmit = p.isEnhancingPrompt ? () => {} : p.handleSubmitWithReset;
-  const inputDisabled = p.isDisabled || p.hasClarification;
+function EditorWithTooltip({
+  showTooltip,
+  isEnhancingPrompt,
+  children,
+}: {
+  showTooltip: boolean;
+  isEnhancingPrompt?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <Tooltip open={showTooltip}>
+      <TooltipTrigger asChild>
+        <div
+          className={cn(
+            "flex-1 min-h-0 transition-opacity",
+            isEnhancingPrompt && "opacity-50 pointer-events-none",
+          )}
+        >
+          {children}
+        </div>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="bg-orange-600 text-white border-orange-700">
+        <p className="font-medium">Write your changes here</p>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function FileInput({
+  fileInputRef,
+  addFiles,
+}: {
+  fileInputRef: React.RefObject<HTMLInputElement | null>;
+  addFiles: (files: File[]) => Promise<void>;
+}) {
+  const handleChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (files && files.length > 0) {
+        void addFiles(Array.from(files));
+      }
+      // Reset so re-selecting the same file triggers onChange
+      e.target.value = "";
+    },
+    [addFiles],
+  );
+
+  return (
+    <input
+      ref={fileInputRef}
+      type="file"
+      multiple
+      className="hidden"
+      onChange={handleChange}
+      tabIndex={-1}
+    />
+  );
+}
+
+export function ChatInputEditorArea({
+  inputRef,
+  value,
+  handleChange,
+  handleSubmitWithReset,
+  inputPlaceholder,
+  isDisabled,
+  hasClarification,
+  planModeEnabled,
+  planModeAvailable,
+  mcpServers,
+  submitKey,
+  setIsInputFocused,
+  sessionId,
+  taskId,
+  onAddContextFile,
+  onToggleContextFile,
+  planContextEnabled,
+  handleAgentCommand,
+  addFiles,
+  fileInputRef,
+  showRequestChangesTooltip,
+  isAgentBusy,
+  onPlanModeChange,
+  taskTitle,
+  taskDescription,
+  isSending,
+  onCancel,
+  contextCount,
+  contextPopoverOpen,
+  setContextPopoverOpen,
+  contextFiles,
+  onImplementPlan,
+  onEnhancePrompt,
+  isEnhancingPrompt,
+  hideSessionsDropdown,
+}: ChatInputEditorAreaProps) {
+  // Block submit while enhancing prompt, but keep editor editable for programmatic updates
+  const wrappedSubmit = isEnhancingPrompt ? () => {} : handleSubmitWithReset;
+
+  const handleAttachFiles = useCallback(() => {
+    fileInputRef.current?.click();
+  }, [fileInputRef]);
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-      <Tooltip open={p.showRequestChangesTooltip}>
-        <TooltipTrigger asChild>
-          <div
-            className={cn(
-              "flex-1 min-h-0 transition-opacity",
-              p.isEnhancingPrompt && "opacity-50 pointer-events-none",
-            )}
-          >
-            <TipTapInput
-              ref={inputRef}
-              value={p.value}
-              onChange={p.handleChange}
-              onSubmit={wrappedSubmit}
-              placeholder={p.inputPlaceholder}
-              disabled={inputDisabled}
-              planModeEnabled={p.planModeEnabled}
-              submitKey={p.submitKey}
-              onFocus={() => p.setIsInputFocused(true)}
-              onBlur={() => p.setIsInputFocused(false)}
-              sessionId={p.sessionId}
-              taskId={p.taskId}
-              onAddContextFile={p.onAddContextFile}
-              onToggleContextFile={p.onToggleContextFile}
-              planContextEnabled={p.planContextEnabled}
-              onAgentCommand={p.handleAgentCommand}
-              onImagePaste={p.handleImagePaste}
-              onPlanModeChange={p.onPlanModeChange}
-            />
-          </div>
-        </TooltipTrigger>
-        <TooltipContent side="top" className="bg-orange-600 text-white border-orange-700">
-          <p className="font-medium">Write your changes here</p>
-        </TooltipContent>
-      </Tooltip>
+      <EditorWithTooltip
+        showTooltip={showRequestChangesTooltip}
+        isEnhancingPrompt={isEnhancingPrompt}
+      >
+        <TipTapInput
+          ref={inputRef}
+          value={value}
+          onChange={handleChange}
+          onSubmit={wrappedSubmit}
+          placeholder={inputPlaceholder}
+          disabled={isDisabled || hasClarification}
+          planModeEnabled={planModeEnabled}
+          submitKey={submitKey}
+          onFocus={() => setIsInputFocused(true)}
+          onBlur={() => setIsInputFocused(false)}
+          sessionId={sessionId}
+          taskId={taskId}
+          onAddContextFile={onAddContextFile}
+          onToggleContextFile={onToggleContextFile}
+          planContextEnabled={planContextEnabled}
+          onAgentCommand={handleAgentCommand}
+          onImagePaste={addFiles}
+          onPlanModeChange={onPlanModeChange}
+        />
+      </EditorWithTooltip>
+      <FileInput fileInputRef={fileInputRef} addFiles={addFiles} />
       <ChatInputToolbar
-        planModeEnabled={p.planModeEnabled}
-        planModeAvailable={p.planModeAvailable}
-        mcpServers={p.mcpServers}
-        onPlanModeChange={p.onPlanModeChange}
-        sessionId={p.sessionId}
-        taskId={p.taskId}
-        taskTitle={p.taskTitle}
-        taskDescription={p.taskDescription}
-        isAgentBusy={p.isAgentBusy}
-        isDisabled={p.isDisabled}
-        isSending={p.isSending}
-        onCancel={p.onCancel}
+        planModeEnabled={planModeEnabled}
+        planModeAvailable={planModeAvailable}
+        mcpServers={mcpServers}
+        onPlanModeChange={onPlanModeChange}
+        sessionId={sessionId}
+        taskId={taskId}
+        taskTitle={taskTitle}
+        taskDescription={taskDescription}
+        isAgentBusy={isAgentBusy}
+        isDisabled={isDisabled}
+        isSending={isSending}
+        onCancel={onCancel}
         onSubmit={wrappedSubmit}
-        submitKey={p.submitKey}
-        contextCount={p.contextCount}
-        contextPopoverOpen={p.contextPopoverOpen}
-        onContextPopoverOpenChange={p.setContextPopoverOpen}
-        planContextEnabled={p.planContextEnabled}
-        contextFiles={p.contextFiles}
-        onToggleFile={p.onToggleContextFile}
-        onImplementPlan={p.onImplementPlan}
-        onEnhancePrompt={p.onEnhancePrompt}
-        isEnhancingPrompt={p.isEnhancingPrompt}
-        hideSessionsDropdown={p.hideSessionsDropdown}
+        submitKey={submitKey}
+        contextCount={contextCount}
+        contextPopoverOpen={contextPopoverOpen}
+        onContextPopoverOpenChange={setContextPopoverOpen}
+        planContextEnabled={planContextEnabled}
+        contextFiles={contextFiles}
+        onToggleFile={onToggleContextFile}
+        onImplementPlan={onImplementPlan}
+        onEnhancePrompt={onEnhancePrompt}
+        isEnhancingPrompt={isEnhancingPrompt}
+        onAttachFiles={handleAttachFiles}
+        hideSessionsDropdown={hideSessionsDropdown}
       />
     </div>
   );
@@ -124,20 +215,15 @@ export type ChatInputContextAreaProps = {
   hasContextZone: boolean;
   allItems: ContextItem[];
   sessionId: string | null;
-  hasTodos: boolean;
-  todoItems: TodoItem[];
 };
 
 export function ChatInputContextArea({
   hasContextZone,
   allItems,
   sessionId,
-  hasTodos,
-  todoItems,
 }: ChatInputContextAreaProps) {
   if (!hasContextZone) return null;
-  const todoSlot = hasTodos ? <TodoSummary todos={todoItems} /> : undefined;
-  return <ContextZone items={allItems} sessionId={sessionId} todoSlot={todoSlot} />;
+  return <ContextZone items={allItems} sessionId={sessionId} />;
 }
 
 export type ChatInputBodyProps = {
@@ -152,6 +238,7 @@ export type ChatInputBodyProps = {
   planModeEnabled: boolean;
   showFocusHint: boolean;
   needsRecovery: boolean;
+  addFiles: (files: File[]) => Promise<void>;
   contextAreaProps: ChatInputContextAreaProps;
   editorAreaProps: ChatInputEditorAreaProps;
 };
@@ -168,9 +255,54 @@ export function ChatInputBody({
   planModeEnabled,
   showFocusHint,
   needsRecovery,
+  addFiles,
   contextAreaProps,
   editorAreaProps,
 }: ChatInputBodyProps) {
+  const [isDragging, setIsDragging] = useState(false);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer.types.includes("Files")) {
+      setIsDragging(true);
+    }
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Only set false when leaving the container (not entering a child)
+    const rect = e.currentTarget.getBoundingClientRect();
+    const { clientX, clientY } = e;
+    if (
+      clientX <= rect.left ||
+      clientX >= rect.right ||
+      clientY <= rect.top ||
+      clientY >= rect.bottom
+    ) {
+      setIsDragging(false);
+    }
+  }, []);
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragging(false);
+      const files = Array.from(e.dataTransfer.files).filter((f) => f.size > 0 || f.type !== "");
+      if (files.length > 0) {
+        void addFiles(files);
+      }
+    },
+    [addFiles],
+  );
+
   return (
     <div className="relative">
       <ResizeHandle
@@ -192,8 +324,13 @@ export function ChatInputBody({
           hasClarification && "border-sky-400/50",
           showRequestChangesTooltip && "animate-pulse border-orange-500",
           hasPendingComments && "border-amber-500/50",
+          isDragging && "border-primary ring-1 ring-primary/30",
         )}
         style={{ height }}
+        onDragOver={handleDragOver}
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
       >
         <ChatInputFocusHint visible={showFocusHint} />
         <ChatInputContextArea {...contextAreaProps} />

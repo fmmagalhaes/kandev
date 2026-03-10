@@ -4,10 +4,12 @@ package acp
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
+	"strings"
 	"sync"
 
 	"github.com/coder/acp-go-sdk"
@@ -29,6 +31,13 @@ type (
 	PermissionHandler  = types.PermissionHandler
 	AgentEvent         = streams.AgentEvent
 	PlanEntry          = streams.PlanEntry
+)
+
+// Content block type constants.
+const (
+	contentTypeImage    = "image"
+	contentTypeAudio    = "audio"
+	contentTypeResource = "resource"
 )
 
 // AgentInfo contains information about the connected agent.
@@ -88,6 +97,9 @@ type Adapter struct {
 	promptTraceCtx context.Context
 	promptTraceMu  sync.RWMutex
 
+	// Attachment management
+	attachMgr *shared.AttachmentManager
+
 	// Synchronization
 	mu     sync.RWMutex
 	closed bool
@@ -97,13 +109,15 @@ type Adapter struct {
 // Call Connect() after starting the subprocess to wire up stdin/stdout.
 // cfg.AgentID is required for debug file naming.
 func NewAdapter(cfg *shared.Config, log *logger.Logger) *Adapter {
+	l := log.WithFields(zap.String("adapter", "acp"), zap.String("agent_id", cfg.AgentID))
 	return &Adapter{
 		cfg:             cfg,
-		logger:          log.WithFields(zap.String("adapter", "acp"), zap.String("agent_id", cfg.AgentID)),
+		logger:          l,
 		agentID:         cfg.AgentID,
 		normalizer:      NewNormalizer(),
 		updatesCh:       make(chan AgentEvent, 100),
 		activeToolCalls: make(map[string]*streams.NormalizedPayload),
+		attachMgr:       shared.NewAttachmentManager(cfg.WorkDir, l.Zap()),
 	}
 }
 
@@ -189,6 +203,15 @@ func (a *Adapter) Initialize(ctx context.Context) error {
 		zap.String("agent_version", a.agentInfo.Version),
 		zap.Bool("supports_load_session", a.capabilities.LoadSession))
 
+	// Emit agent capabilities event with prompt capabilities and auth methods
+	a.sendUpdate(AgentEvent{
+		Type:                    streams.EventTypeAgentCapabilities,
+		SupportsImage:           a.capabilities.PromptCapabilities.Image,
+		SupportsAudio:           a.capabilities.PromptCapabilities.Audio,
+		SupportsEmbeddedContext: a.capabilities.PromptCapabilities.EmbeddedContext,
+		AuthMethods:             convertAuthMethods(resp.AuthMethods),
+	})
+
 	return nil
 }
 
@@ -210,9 +233,10 @@ func (a *Adapter) NewSession(ctx context.Context, mcpServers []types.McpServer) 
 	ctx, span := shared.TraceProtocolRequest(ctx, shared.ProtocolACP, a.agentID, "session.new")
 	defer span.End()
 
+	filteredServers := filterMcpServersByCapabilities(mcpServers, a.capabilities.McpCapabilities, a.logger)
 	resp, err := conn.NewSession(ctx, acp.NewSessionRequest{
 		Cwd:        a.cfg.WorkDir,
-		McpServers: toACPMcpServers(mcpServers),
+		McpServers: toACPMcpServers(filteredServers),
 	})
 	if err != nil {
 		span.RecordError(err)
@@ -223,6 +247,7 @@ func (a *Adapter) NewSession(ctx context.Context, mcpServers []types.McpServer) 
 	a.sessionID = string(resp.SessionId)
 	sessionID := a.sessionID
 	a.mu.Unlock()
+	a.attachMgr.SetSessionID(sessionID)
 
 	span.SetAttributes(attribute.String("session_id", sessionID))
 	a.logger.Info("created new session", zap.String("session_id", sessionID))
@@ -230,6 +255,11 @@ func (a *Adapter) NewSession(ctx context.Context, mcpServers []types.McpServer) 
 	// Emit initial session mode if the agent returned mode state
 	if resp.Modes != nil {
 		a.emitInitialModeState(resp.Modes)
+	}
+
+	// Emit session models if the agent returned model state
+	if resp.Models != nil {
+		a.emitSessionModels(sessionID, resp.Models, resp.Meta)
 	}
 
 	// Emit session status event to normalize with other adapters.
@@ -245,6 +275,28 @@ func (a *Adapter) NewSession(ctx context.Context, mcpServers []types.McpServer) 
 	})
 
 	return sessionID, nil
+}
+
+// filterMcpServersByCapabilities removes MCP servers that the agent doesn't support.
+// Stdio servers are always allowed; SSE/HTTP servers require the corresponding capability.
+func filterMcpServersByCapabilities(servers []types.McpServer, caps acp.McpCapabilities, logger *logger.Logger) []types.McpServer {
+	filtered := make([]types.McpServer, 0, len(servers))
+	for _, s := range servers {
+		switch s.Type {
+		case "sse":
+			if !caps.Sse {
+				logger.Warn("filtering out SSE MCP server (agent does not support SSE)", zap.String("name", s.Name))
+				continue
+			}
+		case "http":
+			if !caps.Http {
+				logger.Warn("filtering out HTTP MCP server (agent does not support HTTP)", zap.String("name", s.Name))
+				continue
+			}
+		}
+		filtered = append(filtered, s)
+	}
+	return filtered
 }
 
 func toACPMcpServers(servers []types.McpServer) []acp.McpServer {
@@ -290,6 +342,8 @@ func (a *Adapter) LoadSession(ctx context.Context, sessionID string) error {
 
 	// Check if the agent supports session loading
 	if !supportsLoad {
+		a.logger.Debug("session/load rejected: agent does not advertise LoadSession capability",
+			zap.String("session_id", sessionID))
 		return fmt.Errorf("agent does not support session loading (LoadSession capability is false)")
 	}
 
@@ -318,6 +372,7 @@ func (a *Adapter) LoadSession(ctx context.Context, sessionID string) error {
 	a.mu.Lock()
 	a.sessionID = sessionID
 	a.mu.Unlock()
+	a.attachMgr.SetSessionID(sessionID)
 
 	span.SetAttributes(attribute.String("session_id", sessionID))
 	a.logger.Info("loaded session", zap.String("session_id", sessionID))
@@ -325,6 +380,11 @@ func (a *Adapter) LoadSession(ctx context.Context, sessionID string) error {
 	// Emit initial session mode if the agent returned mode state
 	if resp.Modes != nil {
 		a.emitInitialModeState(resp.Modes)
+	}
+
+	// Emit session models if the agent returned model state
+	if resp.Models != nil {
+		a.emitSessionModels(sessionID, resp.Models, resp.Meta)
 	}
 
 	// Emit session status event to normalize with other adapters.
@@ -340,6 +400,13 @@ func (a *Adapter) LoadSession(ctx context.Context, sessionID string) error {
 	})
 
 	return nil
+}
+
+// ResetSession creates a new session on the existing connection, effectively resetting
+// the agent's conversation context without restarting the subprocess. This is much faster
+// than a full process restart since the ACP protocol supports multiple sessions per connection.
+func (a *Adapter) ResetSession(ctx context.Context, mcpServers []types.McpServer) (string, error) {
+	return a.NewSession(ctx, mcpServers)
 }
 
 // Prompt sends a prompt to the agent.
@@ -370,10 +437,27 @@ func (a *Adapter) Prompt(ctx context.Context, message string, attachments []v1.M
 	// Build content blocks: text first, then images
 	contentBlocks := []acp.ContentBlock{acp.TextBlock(finalMessage)}
 
-	// Add image attachments as ImageBlocks
+	// Add media attachments as typed content blocks
 	for _, att := range attachments {
-		if att.Type == "image" {
+		switch att.Type {
+		case contentTypeImage:
 			contentBlocks = append(contentBlocks, acp.ImageBlock(att.Data, att.MimeType))
+		case contentTypeAudio:
+			contentBlocks = append(contentBlocks, acp.AudioBlock(att.Data, att.MimeType))
+		case contentTypeResource:
+			if a.capabilities.PromptCapabilities.EmbeddedContext {
+				contentBlocks = append(contentBlocks, buildResourceBlock(att))
+			} else {
+				// Agent doesn't support embedded resources — save to workspace and reference in text
+				saved, saveErr := a.attachMgr.SaveAttachments([]v1.MessageAttachment{att})
+				if saveErr != nil || len(saved) == 0 {
+					a.logger.Warn("failed to save attachment to workspace, falling back to resource block",
+						zap.String("name", att.Name), zap.Error(saveErr))
+					contentBlocks = append(contentBlocks, buildResourceBlock(att))
+				} else {
+					contentBlocks = append(contentBlocks, acp.TextBlock(shared.BuildAttachmentPrompt(saved)))
+				}
+			}
 		}
 	}
 
@@ -432,7 +516,11 @@ func (a *Adapter) Prompt(ctx context.Context, message string, attachments []v1.M
 		Type:      streams.EventTypeComplete,
 		SessionID: sessionID,
 		Data:      map[string]any{"stop_reason": stopReason},
+		Usage:     extractPromptUsage(resp.Meta),
 	})
+
+	// Clean up saved attachments — agent has finished reading them
+	a.attachMgr.Cleanup()
 
 	return nil
 }
@@ -550,6 +638,9 @@ func (a *Adapter) Close() error {
 	a.closed = true
 
 	a.logger.Info("closing ACP adapter")
+
+	// Clean up any saved attachments
+	a.attachMgr.Cleanup()
 
 	// Close update channel
 	close(a.updatesCh)
@@ -752,11 +843,98 @@ func (a *Adapter) convertAvailableCommands(sessionID string, update *acp.Session
 // emitInitialModeState emits a session_mode event from the session response's Modes field.
 // Called after session/new and session/load to provide the initial mode state.
 func (a *Adapter) emitInitialModeState(modes *acp.SessionModeState) {
+	availModes := make([]streams.SessionModeInfo, 0, len(modes.AvailableModes))
+	for _, m := range modes.AvailableModes {
+		availModes = append(availModes, streams.SessionModeInfo{
+			ID:          string(m.Id),
+			Name:        m.Name,
+			Description: derefStr(m.Description),
+		})
+	}
+	a.sendUpdate(AgentEvent{
+		Type:           streams.EventTypeSessionMode,
+		SessionID:      a.sessionID,
+		CurrentModeID:  string(modes.CurrentModeId),
+		AvailableModes: availModes,
+	})
+}
+
+// emitSessionModels emits a session_models event from the session response.
+func (a *Adapter) emitSessionModels(sessionID string, models *acp.SessionModelState, meta any) {
+	a.sendUpdate(AgentEvent{
+		Type:           streams.EventTypeSessionModels,
+		SessionID:      sessionID,
+		CurrentModelID: string(models.CurrentModelId),
+		SessionModels:  convertSessionModels(models.AvailableModels),
+		ConfigOptions:  extractConfigOptions(meta),
+	})
+}
+
+// SetMode changes the agent's session mode via ACP session/set_mode.
+func (a *Adapter) SetMode(ctx context.Context, modeID string) error {
+	a.mu.RLock()
+	conn := a.acpConn
+	sessionID := a.sessionID
+	a.mu.RUnlock()
+
+	if conn == nil {
+		return fmt.Errorf("adapter not initialized")
+	}
+
+	_, err := conn.SetSessionMode(ctx, acp.SetSessionModeRequest{
+		SessionId: acp.SessionId(sessionID),
+		ModeId:    acp.SessionModeId(modeID),
+	})
+	if err != nil {
+		return fmt.Errorf("set session mode failed: %w", err)
+	}
+
 	a.sendUpdate(AgentEvent{
 		Type:          streams.EventTypeSessionMode,
-		SessionID:     a.sessionID,
-		CurrentModeID: string(modes.CurrentModeId),
+		SessionID:     sessionID,
+		CurrentModeID: modeID,
 	})
+	return nil
+}
+
+// SetModel changes the agent's model via ACP session/set_model (unstable SDK method).
+func (a *Adapter) SetModel(ctx context.Context, modelID string) error {
+	a.mu.RLock()
+	conn := a.acpConn
+	sessionID := a.sessionID
+	a.mu.RUnlock()
+
+	if conn == nil {
+		return fmt.Errorf("adapter not initialized")
+	}
+
+	_, err := conn.SetSessionModel(ctx, acp.SetSessionModelRequest{
+		SessionId: acp.SessionId(sessionID),
+		ModelId:   acp.ModelId(modelID),
+	})
+	if err != nil {
+		return fmt.Errorf("set session model failed: %w", err)
+	}
+	return nil
+}
+
+// Authenticate triggers ACP session/authenticate for a given auth method.
+func (a *Adapter) Authenticate(ctx context.Context, methodID string) error {
+	a.mu.RLock()
+	conn := a.acpConn
+	a.mu.RUnlock()
+
+	if conn == nil {
+		return fmt.Errorf("adapter not initialized")
+	}
+
+	_, err := conn.Authenticate(ctx, acp.AuthenticateRequest{
+		MethodId: acp.AuthMethodId(methodID),
+	})
+	if err != nil {
+		return fmt.Errorf("authenticate failed: %w", err)
+	}
+	return nil
 }
 
 // derefStr safely dereferences a string pointer, returning empty string if nil.
@@ -765,6 +943,49 @@ func derefStr(s *string) string {
 		return *s
 	}
 	return ""
+}
+
+// buildResourceBlock constructs an ACP ResourceBlock from a MessageAttachment.
+// Text-based MIME types use TextResourceContents; everything else uses BlobResourceContents.
+func buildResourceBlock(att v1.MessageAttachment) acp.ContentBlock {
+	uri := att.Name // Use filename as URI if no explicit URI
+	if uri == "" {
+		uri = "attachment"
+	}
+	if isTextMimeType(att.MimeType) {
+		text := att.Data
+		if decoded, err := base64.StdEncoding.DecodeString(att.Data); err == nil {
+			text = string(decoded)
+		}
+		return acp.ResourceBlock(acp.EmbeddedResourceResource{
+			TextResourceContents: &acp.TextResourceContents{
+				Uri:      uri,
+				Text:     text,
+				MimeType: acp.Ptr(att.MimeType),
+			},
+		})
+	}
+	return acp.ResourceBlock(acp.EmbeddedResourceResource{
+		BlobResourceContents: &acp.BlobResourceContents{
+			Uri:      uri,
+			Blob:     att.Data,
+			MimeType: acp.Ptr(att.MimeType),
+		},
+	})
+}
+
+// isTextMimeType returns true for MIME types that represent text content.
+func isTextMimeType(mimeType string) bool {
+	if strings.HasPrefix(mimeType, "text/") {
+		return true
+	}
+	switch mimeType {
+	case "application/json", "application/xml", "application/javascript",
+		"application/typescript", "application/x-yaml", "application/toml",
+		"application/x-sh", "application/sql":
+		return true
+	}
+	return false
 }
 
 // convertToolCallContents converts ACP ToolCallContent items to our protocol-agnostic type.
@@ -809,9 +1030,9 @@ func (a *Adapter) convertContentBlockToStreams(cb acp.ContentBlock) *streams.Con
 	case cb.Text != nil:
 		return &streams.ContentBlock{Type: "text", Text: cb.Text.Text}
 	case cb.Image != nil:
-		return &streams.ContentBlock{Type: "image", Data: cb.Image.Data, MimeType: cb.Image.MimeType, URI: derefStr(cb.Image.Uri)}
+		return &streams.ContentBlock{Type: contentTypeImage, Data: cb.Image.Data, MimeType: cb.Image.MimeType, URI: derefStr(cb.Image.Uri)}
 	case cb.Audio != nil:
-		return &streams.ContentBlock{Type: "audio", Data: cb.Audio.Data, MimeType: cb.Audio.MimeType}
+		return &streams.ContentBlock{Type: contentTypeAudio, Data: cb.Audio.Data, MimeType: cb.Audio.MimeType}
 	case cb.ResourceLink != nil:
 		return &streams.ContentBlock{
 			Type: "resource_link", URI: cb.ResourceLink.Uri, Name: cb.ResourceLink.Name,

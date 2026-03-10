@@ -35,6 +35,59 @@ interface ComboboxProps {
   triggerClassName?: string;
   showSearch?: boolean;
   testId?: string;
+  popoverSide?: "top" | "right" | "bottom" | "left";
+  popoverAlign?: "start" | "center" | "end";
+  /** When true, the trigger always renders the plain label text instead of renderLabel. */
+  plainTrigger?: boolean;
+}
+
+function TriggerLabel({
+  selectedOption,
+  plainTrigger,
+  placeholder,
+}: {
+  selectedOption: ComboboxOption | undefined;
+  plainTrigger: boolean;
+  placeholder: string;
+}) {
+  if (!plainTrigger && selectedOption?.renderLabel) {
+    return selectedOption.renderLabel();
+  }
+  return <span className="truncate">{selectedOption?.label || placeholder}</span>;
+}
+
+function OptionsList({
+  options,
+  value,
+  onSelect,
+}: {
+  options: ComboboxOption[];
+  value: string;
+  onSelect: (value: string) => void;
+}) {
+  return (
+    <CommandGroup>
+      {options.map((option) => (
+        <CommandItem
+          key={option.value}
+          value={option.value}
+          keywords={[option.label, option.description ?? ""]}
+          onSelect={() => onSelect(option.value)}
+          className="relative pr-7"
+        >
+          <div className="flex min-w-0 flex-1 items-center">
+            {option.renderLabel ? option.renderLabel() : option.label}
+          </div>
+          <IconCheck
+            className={cn(
+              "absolute right-2 h-4 w-4",
+              value === option.value ? "opacity-100" : "opacity-0",
+            )}
+          />
+        </CommandItem>
+      ))}
+    </CommandGroup>
+  );
 }
 
 export const Combobox = memo(function Combobox({
@@ -50,6 +103,9 @@ export const Combobox = memo(function Combobox({
   triggerClassName,
   showSearch = true,
   testId,
+  popoverSide,
+  popoverAlign = "start",
+  plainTrigger = false,
 }: ComboboxProps) {
   const [open, setOpen] = useState(false);
   // Track the highlighted item. Defaults to the selected value so the current
@@ -76,11 +132,11 @@ export const Combobox = memo(function Combobox({
           data-testid={testId}
         >
           <div className="flex min-w-0 flex-1 items-center">
-            {selectedOption?.renderLabel ? (
-              selectedOption.renderLabel()
-            ) : (
-              <span className="truncate">{selectedOption?.label || placeholder}</span>
-            )}
+            <TriggerLabel
+              selectedOption={selectedOption}
+              plainTrigger={plainTrigger}
+              placeholder={placeholder}
+            />
           </div>
           <IconChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
@@ -91,7 +147,8 @@ export const Combobox = memo(function Combobox({
           "w-[var(--radix-popover-trigger-width)] min-w-[300px] max-w-none p-0 max-h-[var(--radix-popover-content-available-height)]",
           className,
         )}
-        align="start"
+        side={popoverSide}
+        align={popoverAlign}
       >
         <Command value={highlighted} onValueChange={setHighlighted}>
           {dropdownLabel ? (
@@ -102,29 +159,14 @@ export const Combobox = memo(function Combobox({
           {showSearch && <CommandInput placeholder={searchPlaceholder} className="h-9" />}
           <CommandList>
             <CommandEmpty>{emptyMessage}</CommandEmpty>
-            <CommandGroup>
-              {options.map((option) => (
-                <CommandItem
-                  key={option.value}
-                  value={option.value}
-                  onSelect={() => {
-                    onValueChange(option.value === value ? "" : option.value);
-                    setOpen(false);
-                  }}
-                  className="relative pr-7"
-                >
-                  <div className="flex min-w-0 flex-1 items-center">
-                    {option.renderLabel ? option.renderLabel() : option.label}
-                  </div>
-                  <IconCheck
-                    className={cn(
-                      "absolute right-2 h-4 w-4",
-                      value === option.value ? "opacity-100" : "opacity-0",
-                    )}
-                  />
-                </CommandItem>
-              ))}
-            </CommandGroup>
+            <OptionsList
+              options={options}
+              value={value}
+              onSelect={(v) => {
+                onValueChange(v === value ? "" : v);
+                setOpen(false);
+              }}
+            />
           </CommandList>
         </Command>
       </PopoverContent>

@@ -100,6 +100,15 @@ type AgentManagerClient interface {
 	// clearing the agent's conversation context. The execution environment (container/agentctl) is preserved.
 	RestartAgentProcess(ctx context.Context, agentExecutionID string) error
 
+	// ResetAgentContext resets the agent's conversation context using the fastest available strategy.
+	// For ACP agents, this creates a new session without restarting the process.
+	// For other agents, this falls back to RestartAgentProcess.
+	ResetAgentContext(ctx context.Context, agentExecutionID string) error
+
+	// SetSessionModelBySessionID attempts an in-place model switch via ACP session/set_model.
+	// Returns an error if the agent doesn't support in-place model switching.
+	SetSessionModelBySessionID(ctx context.Context, sessionID, modelID string) error
+
 	// WasSessionInitialized reports whether the given execution completed session initialization.
 	// Used to distinguish launch-phase failures from normal prompt failures.
 	WasSessionInitialized(executionID string) bool

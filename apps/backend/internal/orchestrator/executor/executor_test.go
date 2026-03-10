@@ -74,6 +74,13 @@ func (m *mockAgentManager) RespondToPermissionBySessionID(ctx context.Context, s
 func (m *mockAgentManager) RestartAgentProcess(ctx context.Context, agentExecutionID string) error {
 	return nil
 }
+func (m *mockAgentManager) ResetAgentContext(ctx context.Context, agentExecutionID string) error {
+	return nil
+}
+
+func (m *mockAgentManager) SetSessionModelBySessionID(ctx context.Context, sessionID, modelID string) error {
+	return fmt.Errorf("not supported")
+}
 
 func (m *mockAgentManager) IsAgentRunningForSession(ctx context.Context, sessionID string) bool {
 	return false

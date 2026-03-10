@@ -8,6 +8,7 @@ import {
   IconAt,
   IconPlugConnected,
   IconPlugConnectedX,
+  IconPaperclip,
   IconRocket,
   IconRotateClockwise2,
   IconSparkles,
@@ -32,6 +33,8 @@ import { KeyboardShortcutTooltip } from "@/components/keyboard-shortcut-tooltip"
 import { TokenUsageDisplay } from "@/components/task/chat/token-usage-display";
 import { SessionsDropdown } from "@/components/task/sessions-dropdown";
 import { ModelSelector } from "@/components/task/model-selector";
+import { ModeSelector } from "@/components/task/mode-selector";
+import { ConfigOptionsDisplay } from "@/components/task/config-options-display";
 import { ContextPopover } from "./context-popover";
 import type { ContextFile } from "@/lib/state/context-files-store";
 
@@ -62,6 +65,8 @@ export type ChatInputToolbarProps = {
   onEnhancePrompt?: () => void;
   /** Whether prompt enhancement is in progress */
   isEnhancingPrompt?: boolean;
+  /** Callback to open file picker for attaching files */
+  onAttachFiles?: () => void;
   /** Hide the sessions dropdown (for quick chat) */
   hideSessionsDropdown?: boolean;
 };
@@ -339,7 +344,10 @@ function ToolbarRightSection({
         />
       )}
       <TokenUsageDisplay sessionId={sessionId} />
+      <ModeSelector sessionId={sessionId} />
       <ModelSelector sessionId={sessionId} />
+      <ConfigOptionsDisplay sessionId={sessionId} />
+      {/* AuthMethodsIndicator hidden — UX needs rethinking */}
       {showEnhance && (
         <EnhancePromptButton onClick={onEnhancePrompt} isLoading={isEnhancingPrompt ?? false} />
       )}
@@ -383,6 +391,7 @@ export const ChatInputToolbar = memo(function ChatInputToolbar({
   onImplementPlan,
   onEnhancePrompt,
   isEnhancingPrompt = false,
+  onAttachFiles,
   hideSessionsDropdown,
 }: ChatInputToolbarProps) {
   const submitShortcut = submitKey === "enter" ? SHORTCUTS.SUBMIT_ENTER : SHORTCUTS.SUBMIT;
@@ -397,6 +406,23 @@ export const ChatInputToolbar = memo(function ChatInputToolbar({
         />
 
         <McpIndicator mcpServers={mcpServers} />
+
+        {onAttachFiles && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1.5 px-2 cursor-pointer hover:bg-muted/40"
+                onClick={onAttachFiles}
+              >
+                <IconPaperclip className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Attach files</TooltipContent>
+          </Tooltip>
+        )}
 
         <ContextPopover
           open={contextPopoverOpen}

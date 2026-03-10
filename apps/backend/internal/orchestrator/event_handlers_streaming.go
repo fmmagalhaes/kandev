@@ -7,6 +7,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/kandev/kandev/internal/agent/lifecycle"
+	"github.com/kandev/kandev/internal/agentctl/types/streams"
 	"github.com/kandev/kandev/internal/events"
 	"github.com/kandev/kandev/internal/events/bus"
 	"github.com/kandev/kandev/internal/task/models"
@@ -61,6 +62,15 @@ func (s *Service) handleAgentStreamEvent(ctx context.Context, payload *lifecycle
 
 	case "session_mode":
 		s.handleSessionModeEvent(ctx, payload)
+
+	case "agent_capabilities":
+		s.handleAgentCapabilitiesEvent(ctx, payload)
+
+	case "session_models":
+		s.handleSessionModelsEvent(ctx, payload)
+
+	case "plan":
+		s.handleSessionTodosEvent(ctx, payload)
 
 	case "permission_cancelled":
 		s.handlePermissionCancelledEvent(ctx, payload)
@@ -451,6 +461,7 @@ func (s *Service) handleCompleteStreamEvent(ctx context.Context, payload *lifecy
 
 	s.saveAgentTextIfPresent(ctx, payload)
 	s.publishAgentPlanIfPresent(ctx, payload)
+	s.publishPromptUsage(ctx, payload)
 	s.completeTurnForSession(ctx, payload.SessionID)
 
 	// Cancel any pending clarifications for this session so WaitForResponse
@@ -502,6 +513,23 @@ func (s *Service) publishAgentPlanIfPresent(ctx context.Context, payload *lifecy
 	}
 }
 
+// publishPromptUsage broadcasts prompt token usage to the WebSocket for the frontend.
+func (s *Service) publishPromptUsage(ctx context.Context, payload *lifecycle.AgentStreamEventPayload) {
+	sessionID := payload.SessionID
+	if sessionID == "" || s.eventBus == nil || payload.Data.Usage == nil {
+		return
+	}
+	eventPayload := lifecycle.SessionPromptUsageEventPayload{
+		TaskID:    payload.TaskID,
+		SessionID: sessionID,
+		AgentID:   payload.AgentID,
+		Usage:     payload.Data.Usage,
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+	}
+	subject := events.BuildSessionPromptUsageSubject(sessionID)
+	_ = s.eventBus.Publish(ctx, subject, bus.NewEvent(events.SessionPromptUsageUpdated, "orchestrator", eventPayload))
+}
+
 // handleAvailableCommandsEvent broadcasts available_commands events to the WebSocket for the frontend.
 func (s *Service) handleAvailableCommandsEvent(ctx context.Context, payload *lifecycle.AgentStreamEventPayload) {
 	sessionID := payload.SessionID
@@ -525,19 +553,133 @@ func (s *Service) handleSessionModeEvent(ctx context.Context, payload *lifecycle
 	if sessionID == "" || s.eventBus == nil {
 		return
 	}
-	// Don't broadcast "default" mode — it's the baseline state, not worth sending.
-	if payload.Data.CurrentModeID == "default" {
-		return
-	}
 	eventPayload := lifecycle.SessionModeEventPayload{
-		TaskID:        payload.TaskID,
-		SessionID:     sessionID,
-		AgentID:       payload.AgentID,
-		CurrentModeID: payload.Data.CurrentModeID,
-		Timestamp:     time.Now().UTC().Format(time.RFC3339),
+		TaskID:         payload.TaskID,
+		SessionID:      sessionID,
+		AgentID:        payload.AgentID,
+		CurrentModeID:  payload.Data.CurrentModeID,
+		AvailableModes: payload.Data.AvailableModes,
+		Timestamp:      time.Now().UTC().Format(time.RFC3339),
 	}
 	subject := events.BuildSessionModeSubject(sessionID)
 	_ = s.eventBus.Publish(ctx, subject, bus.NewEvent(events.SessionModeChanged, "orchestrator", eventPayload))
+}
+
+// handleAgentCapabilitiesEvent broadcasts agent_capabilities events to the WebSocket.
+func (s *Service) handleAgentCapabilitiesEvent(ctx context.Context, payload *lifecycle.AgentStreamEventPayload) {
+	sessionID := payload.SessionID
+	if sessionID == "" || s.eventBus == nil {
+		return
+	}
+	eventPayload := lifecycle.AgentCapabilitiesEventPayload{
+		TaskID:                  payload.TaskID,
+		SessionID:               sessionID,
+		AgentID:                 payload.AgentID,
+		SupportsImage:           payload.Data.SupportsImage,
+		SupportsAudio:           payload.Data.SupportsAudio,
+		SupportsEmbeddedContext: payload.Data.SupportsEmbeddedContext,
+		AuthMethods:             payload.Data.AuthMethods,
+		Timestamp:               time.Now().UTC().Format(time.RFC3339),
+	}
+	subject := events.BuildAgentCapabilitiesSubject(sessionID)
+	_ = s.eventBus.Publish(ctx, subject, bus.NewEvent(events.AgentCapabilitiesUpdated, "orchestrator", eventPayload))
+}
+
+// handleSessionModelsEvent broadcasts session_models events to the WebSocket
+// and persists the current model to the session snapshot so it survives page refresh.
+func (s *Service) handleSessionModelsEvent(ctx context.Context, payload *lifecycle.AgentStreamEventPayload) {
+	sessionID := payload.SessionID
+	if sessionID == "" || s.eventBus == nil {
+		return
+	}
+
+	// Persist the ACP-reported current model to the session snapshot so it's
+	// available after page refresh (SSR reads from the DB, not runtime state).
+	if currentModel := payload.Data.CurrentModelID; currentModel != "" {
+		s.persistSessionModel(ctx, sessionID, currentModel)
+	}
+
+	eventPayload := lifecycle.SessionModelsEventPayload{
+		TaskID:         payload.TaskID,
+		SessionID:      sessionID,
+		AgentID:        payload.AgentID,
+		CurrentModelID: payload.Data.CurrentModelID,
+		Models:         payload.Data.SessionModels,
+		ConfigOptions:  payload.Data.ConfigOptions,
+		Timestamp:      time.Now().UTC().Format(time.RFC3339),
+	}
+	subject := events.BuildSessionModelsSubject(sessionID)
+	_ = s.eventBus.Publish(ctx, subject, bus.NewEvent(events.SessionModelsUpdated, "orchestrator", eventPayload))
+}
+
+// persistSessionModel updates the session's AgentProfileSnapshot with the current model.
+func (s *Service) persistSessionModel(ctx context.Context, sessionID, model string) {
+	session, err := s.repo.GetTaskSession(ctx, sessionID)
+	if err != nil {
+		return
+	}
+	if session.AgentProfileSnapshot == nil {
+		session.AgentProfileSnapshot = make(map[string]interface{})
+	}
+	existing, _ := session.AgentProfileSnapshot["model"].(string)
+	if existing == model {
+		return
+	}
+	session.AgentProfileSnapshot["model"] = model
+	_ = s.repo.UpdateTaskSession(ctx, session)
+	// Invalidate the message creator's model cache so subsequent messages use the new model.
+	if s.messageCreator != nil {
+		s.messageCreator.InvalidateModelCache(sessionID)
+	}
+}
+
+// handleSessionTodosEvent broadcasts plan/todo entries to the WebSocket and persists
+// them as a chat message so they survive page refresh and appear in the chat timeline.
+func (s *Service) handleSessionTodosEvent(ctx context.Context, payload *lifecycle.AgentStreamEventPayload) {
+	sessionID := payload.SessionID
+	if sessionID == "" || s.eventBus == nil {
+		return
+	}
+	entries := payload.Data.PlanEntries
+
+	// Broadcast real-time update via event bus (updates the store's sessionTodos)
+	eventPayload := lifecycle.SessionTodosEventPayload{
+		TaskID:    payload.TaskID,
+		SessionID: sessionID,
+		AgentID:   payload.AgentID,
+		Entries:   entries,
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+	}
+	subject := events.BuildSessionTodosSubject(sessionID)
+	_ = s.eventBus.Publish(ctx, subject, bus.NewEvent(events.SessionTodosUpdated, "orchestrator", eventPayload))
+
+	// Persist as a chat message so todos appear in the timeline and survive refresh
+	s.persistTodoMessage(ctx, payload.TaskID, sessionID, entries)
+}
+
+// persistTodoMessage creates a "todo" message with the todo entries as metadata.
+// Empty entries are persisted too — they represent the agent clearing all todos.
+func (s *Service) persistTodoMessage(ctx context.Context, taskID, sessionID string, entries []streams.PlanEntry) {
+	if s.messageCreator == nil {
+		return
+	}
+	todos := make([]map[string]interface{}, len(entries))
+	for i, e := range entries {
+		todos[i] = map[string]interface{}{
+			"text":   e.Description,
+			"status": e.Status,
+			"done":   e.Status == "completed",
+		}
+	}
+	metadata := map[string]interface{}{"todos": todos}
+	if err := s.messageCreator.CreateSessionMessage(
+		ctx, taskID, "Updated Todos", sessionID,
+		string(models.MessageTypeTodo), s.getActiveTurnID(sessionID), metadata, false,
+	); err != nil {
+		s.logger.Warn("failed to create todo message",
+			zap.String("session_id", sessionID),
+			zap.Error(err))
+	}
 }
 
 // handlePermissionCancelledEvent marks the pending permission message as expired.

@@ -72,6 +72,137 @@ func (m *Manager) CancelAgent(ctx context.Context, executionID string) error {
 	return nil
 }
 
+// SetSessionMode changes the session mode for a running agent.
+// Always uses the execution's current ACPSessionID rather than the caller's copy,
+// which may be stale during startup/restart when the session is being re-initialized.
+func (m *Manager) SetSessionMode(ctx context.Context, executionID, _ string, modeID string) error {
+	execution, exists := m.executionStore.Get(executionID)
+	if !exists {
+		return fmt.Errorf("execution %q not found", executionID)
+	}
+	if execution.agentctl == nil {
+		return fmt.Errorf("execution %q has no agentctl client", executionID)
+	}
+	if !execution.sessionInitialized || execution.ACPSessionID == "" {
+		return fmt.Errorf("execution %q ACP session is not ready", executionID)
+	}
+	return execution.agentctl.SetMode(ctx, execution.ACPSessionID, modeID)
+}
+
+// SetSessionModeBySessionID changes the session mode for a running agent by session ID.
+func (m *Manager) SetSessionModeBySessionID(ctx context.Context, sessionID, modeID string) error {
+	execution, exists := m.executionStore.GetBySessionID(sessionID)
+	if !exists {
+		return fmt.Errorf("no agent running for session %q", sessionID)
+	}
+	return m.SetSessionMode(ctx, execution.ID, execution.ACPSessionID, modeID)
+}
+
+// SetSessionModel changes the session model for a running agent.
+func (m *Manager) SetSessionModel(ctx context.Context, executionID, modelID string) error {
+	execution, exists := m.executionStore.Get(executionID)
+	if !exists {
+		return fmt.Errorf("execution %q not found", executionID)
+	}
+	if execution.agentctl == nil {
+		return fmt.Errorf("execution %q has no agentctl client", executionID)
+	}
+	return execution.agentctl.SetModel(ctx, modelID)
+}
+
+// SetSessionModelBySessionID changes the session model for a running agent by session ID.
+func (m *Manager) SetSessionModelBySessionID(ctx context.Context, sessionID, modelID string) error {
+	execution, exists := m.executionStore.GetBySessionID(sessionID)
+	if !exists {
+		return fmt.Errorf("no agent running for session %q", sessionID)
+	}
+	return m.SetSessionModel(ctx, execution.ID, modelID)
+}
+
+// AuthenticateBySessionID triggers authentication for a given auth method on the agent.
+func (m *Manager) AuthenticateBySessionID(ctx context.Context, sessionID, methodID string) error {
+	execution, exists := m.executionStore.GetBySessionID(sessionID)
+	if !exists {
+		return fmt.Errorf("no agent running for session %q", sessionID)
+	}
+	if execution.agentctl == nil {
+		return fmt.Errorf("execution %q has no agentctl client", execution.ID)
+	}
+	return execution.agentctl.Authenticate(ctx, methodID)
+}
+
+// ResetAgentContext resets the agent's conversation context. For ACP agents that support
+// session reset, this creates a new session on the existing connection (fast, no process restart).
+// For all other agents, this falls back to RestartAgentProcess (full subprocess restart).
+func (m *Manager) ResetAgentContext(ctx context.Context, executionID string) error {
+	execution, exists := m.executionStore.Get(executionID)
+	if !exists {
+		return fmt.Errorf("execution %q not found: %w", executionID, ErrExecutionNotFound)
+	}
+
+	// Passthrough agents always need full restart
+	if execution.PassthroughProcessID != "" {
+		return m.RestartAgentProcess(ctx, executionID)
+	}
+
+	if execution.agentctl == nil {
+		return fmt.Errorf("execution %q has no agentctl client", executionID)
+	}
+
+	// Resolve agent config and MCP servers for session reset
+	agentConfig, err := m.getAgentConfigForExecution(execution)
+	if err != nil {
+		m.logger.Info("cannot resolve agent config for session reset, falling back to process restart",
+			zap.String("execution_id", executionID), zap.Error(err))
+		return m.RestartAgentProcess(ctx, executionID)
+	}
+
+	mcpServers, err := m.resolveMcpServers(ctx, execution, agentConfig)
+	if err != nil {
+		m.logger.Warn("cannot resolve MCP servers for session reset, falling back to process restart",
+			zap.String("execution_id", executionID), zap.Error(err))
+		return m.RestartAgentProcess(ctx, executionID)
+	}
+
+	// Try session-level reset (only ACP adapters support this)
+	newSessionID, err := execution.agentctl.ResetSession(ctx, execution.WorkspacePath, mcpServers)
+	if err != nil {
+		m.logger.Info("session reset not supported, falling back to process restart",
+			zap.String("execution_id", executionID), zap.Error(err))
+		return m.RestartAgentProcess(ctx, executionID)
+	}
+
+	// Success — update execution state without restarting process
+	_ = m.executionStore.WithLock(executionID, func(exec *AgentExecution) {
+		exec.ACPSessionID = newSessionID
+		exec.Status = v1.AgentStatusReady
+		exec.needsResumeContext = false
+		exec.resumeContextInjected = false
+
+		exec.messageMu.Lock()
+		exec.messageBuffer.Reset()
+		exec.thinkingBuffer.Reset()
+		exec.currentMessageID = ""
+		exec.currentThinkingID = ""
+		exec.messageMu.Unlock()
+
+		// Drain any stale prompt completion signal
+		select {
+		case <-exec.promptDoneCh:
+		default:
+		}
+	})
+
+	m.logger.Info("agent context reset via session (no process restart)",
+		zap.String("execution_id", executionID),
+		zap.String("session_id", execution.SessionID),
+		zap.String("new_acp_session_id", newSessionID))
+
+	m.eventPublisher.PublishAgentEvent(ctx, events.AgentContextReset, execution)
+	m.eventPublisher.PublishAgentEvent(ctx, events.AgentReady, execution)
+	return nil
+}
+
 // CancelAgentBySessionID cancels the current agent turn for a specific session
 func (m *Manager) CancelAgentBySessionID(ctx context.Context, sessionID string) error {
 	execution, exists := m.executionStore.GetBySessionID(sessionID)
@@ -369,6 +500,26 @@ func (m *Manager) GetAvailableCommandsForSession(sessionID string) []streams.Ava
 	return execution.GetAvailableCommands()
 }
 
+// GetModeStateForSession returns the cached session mode state.
+// Returns nil if the session has no execution or no mode state cached.
+func (m *Manager) GetModeStateForSession(sessionID string) *CachedModeState {
+	execution, exists := m.executionStore.GetBySessionID(sessionID)
+	if !exists {
+		return nil
+	}
+	return execution.GetModeState()
+}
+
+// GetModelStateForSession returns the cached session model state.
+// Returns nil if the session has no execution or no model state cached.
+func (m *Manager) GetModelStateForSession(sessionID string) *CachedModelState {
+	execution, exists := m.executionStore.GetBySessionID(sessionID)
+	if !exists {
+		return nil
+	}
+	return execution.GetModelState()
+}
+
 // ListExecutions returns all currently tracked agent executions.
 //
 // Returns a snapshot of all executions in memory at the time of call. The returned slice
@@ -518,6 +669,16 @@ func (m *Manager) MarkCompleted(executionID string, exitCode int, errorMessage s
 	execution, exists := m.executionStore.Get(executionID)
 	if !exists {
 		return fmt.Errorf("execution %q not found", executionID)
+	}
+
+	// Guard against duplicate completion (e.g. ACP prompt error + process exit error).
+	// MarkCompleted is a terminal transition — once in Completed/Failed, skip re-publishing.
+	if execution.Status == v1.AgentStatusCompleted || execution.Status == v1.AgentStatusFailed {
+		m.logger.Warn("ignoring duplicate MarkCompleted for already-terminal execution",
+			zap.String("execution_id", executionID),
+			zap.String("current_status", string(execution.Status)),
+			zap.Int("exit_code", exitCode))
+		return nil
 	}
 
 	_ = m.executionStore.WithLock(executionID, func(exec *AgentExecution) {

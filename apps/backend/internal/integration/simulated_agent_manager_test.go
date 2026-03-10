@@ -406,6 +406,14 @@ func (s *SimulatedAgentManagerClient) RestartAgentProcess(ctx context.Context, a
 	return nil
 }
 
+func (s *SimulatedAgentManagerClient) ResetAgentContext(ctx context.Context, agentExecutionID string) error {
+	return s.RestartAgentProcess(ctx, agentExecutionID)
+}
+
+func (s *SimulatedAgentManagerClient) SetSessionModelBySessionID(_ context.Context, _, _ string) error {
+	return fmt.Errorf("not supported")
+}
+
 func (s *SimulatedAgentManagerClient) WasSessionInitialized(_ string) bool { return false }
 func (s *SimulatedAgentManagerClient) IsPassthroughSession(ctx context.Context, sessionID string) bool {
 	return false

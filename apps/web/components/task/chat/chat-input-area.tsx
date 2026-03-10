@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { IconBrain, IconGitMerge, IconX } from "@tabler/icons-react";
+import { TodoIndicator } from "./todo-indicator";
 import { getWebSocketClient } from "@/lib/ws/connection";
 import { useKeyboardShortcut } from "@/hooks/use-keyboard-shortcut";
 import { SHORTCUTS } from "@/lib/keyboard/constants";
@@ -292,15 +293,32 @@ function PRMergedBanner({ taskId }: { taskId: string }) {
   );
 }
 
+type TodoDisplayItem = {
+  text: string;
+  done?: boolean;
+  status?: "pending" | "in_progress" | "completed" | "failed";
+};
+
+function SessionStatusBar({ todoItems }: { todoItems: TodoDisplayItem[] }) {
+  const showTodos = todoItems.length > 0;
+  if (!showTodos) return null;
+  return (
+    <div className="flex items-center gap-1.5 px-3 py-1 text-xs text-muted-foreground">
+      <TodoIndicator todos={todoItems} />
+    </div>
+  );
+}
+
 function AgentModeIndicator({ sessionId }: { sessionId: string | null }) {
-  const agentMode = useAppStore((state) =>
+  const modeState = useAppStore((state) =>
     sessionId ? state.sessionMode.bySessionId[sessionId] : undefined,
   );
-  if (!agentMode || agentMode === "default") return null;
+  const modeId = modeState?.currentModeId;
+  if (!modeId || modeId === "default") return null;
   return (
     <div className="flex items-center gap-1.5 px-3 py-1 text-xs text-muted-foreground">
       <IconBrain className="h-3 w-3" />
-      <span className="capitalize">{agentMode} mode</span>
+      <span className="capitalize">{modeId} mode</span>
     </div>
   );
 }
@@ -374,6 +392,7 @@ export function ChatInputArea({
   );
   return (
     <div className="bg-card flex-shrink-0 px-2 pb-2 pt-1">
+      <SessionStatusBar todoItems={todoItems} />
       <AgentModeIndicator sessionId={resolvedSessionId} />
       {taskId && <PRMergedBanner key={taskId} taskId={taskId} />}
       <ChatInputContainer
@@ -410,7 +429,6 @@ export function ChatInputArea({
         contextFiles={contextFiles}
         onToggleContextFile={handleToggleContextFile}
         onAddContextFile={handleAddContextFile}
-        todoItems={todoItems}
         onImplementPlan={handleImplementPlan}
         hideSessionsDropdown={hideSessionsDropdown}
       />

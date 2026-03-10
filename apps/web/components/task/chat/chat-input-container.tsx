@@ -22,9 +22,10 @@ export type { ImageAttachment } from "./image-attachment-preview";
 
 // Type for message attachments sent to backend
 export type MessageAttachment = {
-  type: "image";
+  type: "image" | "audio" | "resource";
   data: string;
   mime_type: string;
+  name?: string;
 };
 
 export type ChatInputContainerHandle = {
@@ -35,8 +36,6 @@ export type ChatInputContainerHandle = {
   insertText: (text: string, from: number, to: number) => void;
   clear: () => void;
 };
-
-type TodoItem = { text: string; done?: boolean };
 
 type ChatInputContainerProps = {
   onSubmit: (
@@ -73,7 +72,6 @@ type ChatInputContainerProps = {
   contextFiles?: ContextFile[];
   onToggleContextFile?: (file: ContextFile) => void;
   onAddContextFile?: (file: ContextFile) => void;
-  todoItems?: TodoItem[];
   onImplementPlan?: () => void;
   hideSessionsDropdown?: boolean;
 };
@@ -135,8 +133,6 @@ function buildContextAreaProps(
     hasContextZone: s.hasContextZone,
     allItems: s.allItems,
     sessionId: p.sessionId,
-    hasTodos: s.hasTodos,
-    todoItems: p.todoItems ?? [],
   };
 }
 
@@ -169,7 +165,8 @@ function buildEditorAreaProps(
     onToggleContextFile: p.onToggleContextFile,
     planContextEnabled: p.planContextEnabled ?? false,
     handleAgentCommand: s.handleAgentCommand,
-    handleImagePaste: s.handleImagePaste,
+    addFiles: s.addFiles,
+    fileInputRef: s.fileInputRef,
     showRequestChangesTooltip: p.showRequestChangesTooltip ?? false,
     isAgentBusy: p.isAgentBusy,
     onPlanModeChange: p.onPlanModeChange,
@@ -210,7 +207,6 @@ export const ChatInputContainer = forwardRef<ChatInputContainerHandle, ChatInput
       planContextEnabled: props.planContextEnabled ?? false,
       contextFiles: props.contextFiles ?? [],
       contextItems: props.contextItems ?? [],
-      todoItems: props.todoItems ?? [],
       showRequestChangesTooltip,
     } as const;
 
@@ -229,7 +225,6 @@ export const ChatInputContainer = forwardRef<ChatInputContainerHandle, ChatInput
       onClarificationResolved: props.onClarificationResolved,
       pendingCommentsByFile: props.pendingCommentsByFile,
       hasContextComments: props.hasContextComments ?? false,
-      todoItems: p.todoItems,
       showRequestChangesTooltip,
       onRequestChangesTooltipDismiss: props.onRequestChangesTooltipDismiss,
       onSubmit: props.onSubmit,
@@ -276,6 +271,7 @@ export const ChatInputContainer = forwardRef<ChatInputContainerHandle, ChatInput
         planModeEnabled={props.planModeEnabled}
         showFocusHint={s.showFocusHint}
         needsRecovery={props.needsRecovery ?? false}
+        addFiles={s.addFiles}
         contextAreaProps={buildContextAreaProps(s, p)}
         editorAreaProps={buildEditorAreaProps(
           s,

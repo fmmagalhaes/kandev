@@ -164,6 +164,21 @@ const (
 	SessionModeChanged = "session_mode.changed" // Agent session mode changed
 )
 
+// Event types for ACP capabilities and models
+const (
+	AgentCapabilitiesUpdated = "agent_capabilities.updated" // Agent capabilities received
+	SessionModelsUpdated     = "session_models.updated"     // Session models received
+)
+
+// Event types for session todos (ACP plan entries)
+const (
+	SessionTodosUpdated = "session_todos.updated" // Agent plan/todo entries updated
+)
+
+const (
+	SessionPromptUsageUpdated = "session_prompt_usage.updated" // Prompt token usage updated
+)
+
 // Event types for GitHub integration
 const (
 	GitHubPRFeedback     = "github.pr_feedback"      // PR has new feedback (UI notification only)
@@ -292,4 +307,44 @@ func BuildSessionModeSubject(sessionID string) string {
 // BuildSessionModeWildcardSubject creates a wildcard subscription for all session mode events
 func BuildSessionModeWildcardSubject() string {
 	return SessionModeChanged + ".*"
+}
+
+// BuildAgentCapabilitiesSubject creates an agent capabilities subject for a specific session
+func BuildAgentCapabilitiesSubject(sessionID string) string {
+	return AgentCapabilitiesUpdated + "." + sessionID
+}
+
+// BuildAgentCapabilitiesWildcardSubject creates a wildcard subscription for all agent capabilities events
+func BuildAgentCapabilitiesWildcardSubject() string {
+	return AgentCapabilitiesUpdated + ".*"
+}
+
+// BuildSessionModelsSubject creates a session models subject for a specific session
+func BuildSessionModelsSubject(sessionID string) string {
+	return SessionModelsUpdated + "." + sessionID
+}
+
+// BuildSessionModelsWildcardSubject creates a wildcard subscription for all session models events
+func BuildSessionModelsWildcardSubject() string {
+	return SessionModelsUpdated + ".*"
+}
+
+// BuildSessionTodosSubject creates a session todos subject for a specific session
+func BuildSessionTodosSubject(sessionID string) string {
+	return SessionTodosUpdated + "." + sessionID
+}
+
+// BuildSessionTodosWildcardSubject creates a wildcard subscription for all session todos events
+func BuildSessionTodosWildcardSubject() string {
+	return SessionTodosUpdated + ".*"
+}
+
+// BuildSessionPromptUsageSubject creates a prompt usage subject for a specific session
+func BuildSessionPromptUsageSubject(sessionID string) string {
+	return SessionPromptUsageUpdated + "." + sessionID
+}
+
+// BuildSessionPromptUsageWildcardSubject creates a wildcard subscription for all prompt usage events
+func BuildSessionPromptUsageWildcardSubject() string {
+	return SessionPromptUsageUpdated + ".*"
 }
