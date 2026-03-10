@@ -313,6 +313,14 @@ func startAgentInfrastructure(
 		log.Info("GitHub poller started")
 	}
 
+	// Wire automation service into orchestrator for trigger-based task creation
+	if services.Automation != nil {
+		orchestratorSvc.SetAutomationService(services.Automation.Service)
+		services.Automation.Start(ctx)
+		addCleanup(func() error { services.Automation.Stop(); return nil })
+		log.Info("Automation scheduler and evaluator started")
+	}
+
 	return startGatewayAndServe(ctx, cfg, log, eventBus, repos, services,
 		agentSettingsController, lifecycleMgr, agentRegistry, orchestratorSvc, msgCreator, runCleanups)
 }

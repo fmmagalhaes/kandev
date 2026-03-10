@@ -15,6 +15,7 @@ import {
   IconBrandGithub,
   IconSparkles,
   IconWand,
+  IconBolt,
 } from "@tabler/icons-react";
 import {
   Sidebar,
@@ -103,6 +104,7 @@ function WorkspacesSidebarSection({ pathname, workspaces }: WorkspacesSidebarSec
             const workflowsPath = `${workspacePath}/workflows`;
             const repositoriesPath = `${workspacePath}/repositories`;
             const githubPath = `${workspacePath}/github`;
+            const automationsPath = `${workspacePath}/automations`;
 
             return (
               <SidebarMenuSubItem key={workspace.id}>
@@ -135,6 +137,18 @@ function WorkspacesSidebarSection({ pathname, workspaces }: WorkspacesSidebarSec
                       <Link href={githubPath}>
                         <IconBrandGithub className="h-3.5 w-3.5" />
                         <span>GitHub</span>
+                      </Link>
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                  <SidebarMenuSubItem>
+                    <SidebarMenuSubButton
+                      asChild
+                      size="sm"
+                      isActive={pathname.startsWith(automationsPath)}
+                    >
+                      <Link href={automationsPath}>
+                        <IconBolt className="h-3.5 w-3.5" />
+                        <span>Automations</span>
                       </Link>
                     </SidebarMenuSubButton>
                   </SidebarMenuSubItem>

@@ -3,6 +3,7 @@ package main
 import (
 	settingsstore "github.com/kandev/kandev/internal/agent/settings/store"
 	analyticsrepository "github.com/kandev/kandev/internal/analytics/repository"
+	"github.com/kandev/kandev/internal/automation"
 	editorservice "github.com/kandev/kandev/internal/editors/service"
 	editorstore "github.com/kandev/kandev/internal/editors/store"
 	"github.com/kandev/kandev/internal/github"
@@ -43,4 +44,5 @@ type Services struct {
 	Utility      *utilityservice.Service
 	Workflow     *workflowservice.Service
 	GitHub       *github.Service
+	Automation   *automation.Components
 }

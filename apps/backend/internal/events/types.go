@@ -164,6 +164,12 @@ const (
 	SessionModeChanged = "session_mode.changed" // Agent session mode changed
 )
 
+// Event types for automations
+const (
+	AutomationTriggered  = "automation.triggered"   // A trigger fired
+	AutomationRunCreated = "automation.run.created" // Run outcome recorded
+)
+
 // Event types for GitHub integration
 const (
 	GitHubPRFeedback     = "github.pr_feedback"      // PR has new feedback (UI notification only)

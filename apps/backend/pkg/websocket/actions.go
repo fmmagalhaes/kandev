@@ -318,6 +318,23 @@ const (
 	ActionGitHubCheckSessionPR    = "github.check_session_pr"
 )
 
+// Automation actions
+const (
+	ActionAutomationList          = "automation.list"
+	ActionAutomationGet           = "automation.get"
+	ActionAutomationCreate        = "automation.create"
+	ActionAutomationUpdate        = "automation.update"
+	ActionAutomationDelete        = "automation.delete"
+	ActionAutomationEnable        = "automation.enable"
+	ActionAutomationDisable       = "automation.disable"
+	ActionAutomationTrigger       = "automation.trigger"
+	ActionAutomationRunsList      = "automation.runs.list"
+	ActionAutomationTriggerAdd    = "automation.trigger.add"
+	ActionAutomationTriggerUpdate = "automation.trigger.update"
+	ActionAutomationTriggerDelete = "automation.trigger.delete"
+	ActionAutomationTriggerTypes  = "automation.trigger_types"
+)
+
 // Error codes
 const (
 	ErrorCodeBadRequest    = "BAD_REQUEST"

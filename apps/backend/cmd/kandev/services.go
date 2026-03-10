@@ -8,6 +8,7 @@ import (
 	"github.com/kandev/kandev/internal/agent/discovery"
 	"github.com/kandev/kandev/internal/agent/registry"
 	agentsettingscontroller "github.com/kandev/kandev/internal/agent/settings/controller"
+	"github.com/kandev/kandev/internal/automation"
 	"github.com/kandev/kandev/internal/common/config"
 	"github.com/kandev/kandev/internal/common/logger"
 	"github.com/kandev/kandev/internal/db"
@@ -81,14 +82,21 @@ func provideServices(cfg *config.Config, log *logger.Logger, repos *Repositories
 		log.Warn("GitHub service initialization failed (non-fatal)", zap.Error(err))
 	}
 
+	// Initialize Automation service
+	automationComponents, automationErr := automation.Provide(dbPool.Writer(), dbPool.Reader(), eventBus, githubSvc, log)
+	if automationErr != nil {
+		log.Warn("Automation service initialization failed (non-fatal)", zap.Error(automationErr))
+	}
+
 	return &Services{
-		Task:     taskSvc,
-		User:     userSvc,
-		Editor:   editorSvc,
-		Prompts:  promptSvc,
-		Utility:  utilitySvc,
-		Workflow: workflowSvc,
-		GitHub:   githubSvc,
+		Task:       taskSvc,
+		User:       userSvc,
+		Editor:     editorSvc,
+		Prompts:    promptSvc,
+		Utility:    utilitySvc,
+		Workflow:   workflowSvc,
+		GitHub:     githubSvc,
+		Automation: automationComponents,
 		// Notification service is initialized after gateway is available.
 		Notification: nil,
 	}, agentSettingsController, nil

@@ -16,6 +16,7 @@ import (
 	"github.com/kandev/kandev/internal/agentctl/tracing"
 	analyticshandlers "github.com/kandev/kandev/internal/analytics/handlers"
 	analyticsrepository "github.com/kandev/kandev/internal/analytics/repository"
+	"github.com/kandev/kandev/internal/automation"
 	"github.com/kandev/kandev/internal/clarification"
 	"github.com/kandev/kandev/internal/common/logger"
 	debughandlers "github.com/kandev/kandev/internal/debug"
@@ -470,6 +471,11 @@ func registerSecondaryRoutes(
 		p.log.Debug("Registered GitHub handlers (HTTP + WebSocket)")
 	}
 
+	if p.services.Automation != nil {
+		automation.RegisterRoutes(p.router, p.gateway.Dispatcher, p.services.Automation.Service, p.log)
+		p.log.Debug("Registered Automation handlers (HTTP + WebSocket)")
+	}
+
 	docker.RegisterDockerRoutes(p.router, p.lifecycleMgr.DockerClientProvider(), p.log)
 	p.log.Debug("Registered Docker management handlers (HTTP)")
 
@@ -477,7 +483,11 @@ func registerSecondaryRoutes(
 
 	registerMCPAndDebugRoutes(p, workflowCtrl, clarificationStore, planService)
 
-	registerE2EResetRoutes(p.router, p.taskRepo, p.log)
+	var automationSvc *automation.Service
+	if p.services.Automation != nil {
+		automationSvc = p.services.Automation.Service
+	}
+	registerE2EResetRoutes(p.router, p.taskRepo, automationSvc, p.log)
 }
 
 // registerHealthRoutes sets up the system health endpoint with all health checkers.

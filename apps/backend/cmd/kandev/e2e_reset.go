@@ -8,13 +8,14 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
+	"github.com/kandev/kandev/internal/automation"
 	"github.com/kandev/kandev/internal/common/logger"
 	sqliterepo "github.com/kandev/kandev/internal/task/repository/sqlite"
 )
 
 // registerE2EResetRoutes registers the E2E data-reset endpoint.
 // The endpoint is available when KANDEV_MOCK_AGENT is "true" or "only" (dev/E2E modes).
-func registerE2EResetRoutes(router *gin.Engine, repo *sqliterepo.Repository, log *logger.Logger) {
+func registerE2EResetRoutes(router *gin.Engine, repo *sqliterepo.Repository, automationSvc *automation.Service, log *logger.Logger) {
 	mockMode := os.Getenv("KANDEV_MOCK_AGENT")
 	if mockMode != "true" && mockMode != "only" {
 		return
@@ -46,9 +47,20 @@ func registerE2EResetRoutes(router *gin.Engine, repo *sqliterepo.Repository, log
 			return
 		}
 
+		deletedAutomations := 0
+		if automationSvc != nil {
+			n, aErr := automationSvc.Store().DeleteAutomationsByWorkspace(ctx, workspaceID)
+			if aErr != nil {
+				log.Error("e2e reset: failed to delete automations", zap.Error(aErr))
+			} else {
+				deletedAutomations = n
+			}
+		}
+
 		c.JSON(http.StatusOK, gin.H{
-			"deleted_tasks":     deletedTasks,
-			"deleted_workflows": deletedWorkflows,
+			"deleted_tasks":       deletedTasks,
+			"deleted_workflows":   deletedWorkflows,
+			"deleted_automations": deletedAutomations,
 		})
 	})
 

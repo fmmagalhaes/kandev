@@ -16,6 +16,7 @@ import type {
   ReviewWatch as GitHubReviewWatch,
 } from "@/lib/types/github";
 import type { SystemHealthResponse } from "@/lib/types/health";
+import type { Automation, AutomationRun } from "@/lib/types/automation";
 import {
   createKanbanSlice,
   createWorkspaceSlice,
@@ -24,6 +25,7 @@ import {
   createSessionRuntimeSlice,
   createUISlice,
   createGitHubSlice,
+  createAutomationsSlice,
   defaultKanbanState,
   defaultWorkspaceState,
   defaultSettingsState,
@@ -31,6 +33,7 @@ import {
   defaultSessionRuntimeState,
   defaultUIState,
   defaultGitHubState,
+  defaultAutomationsState,
   type WorkspaceState,
   type WorkflowsState,
   type ExecutorsState,
@@ -179,6 +182,10 @@ export type AppState = {
   prWatches: (typeof defaultGitHubState)["prWatches"];
   reviewWatches: (typeof defaultGitHubState)["reviewWatches"];
 
+  // Automations slice
+  automations: (typeof defaultAutomationsState)["automations"];
+  automationRuns: (typeof defaultAutomationsState)["automationRuns"];
+
   // UI slice
   previewPanel: (typeof defaultUIState)["previewPanel"];
   rightPanel: (typeof defaultUIState)["rightPanel"];
@@ -206,6 +213,15 @@ export type AppState = {
   addReviewWatch: (watch: GitHubReviewWatch) => void;
   updateReviewWatch: (watch: GitHubReviewWatch) => void;
   removeReviewWatch: (id: string) => void;
+
+  // Automations actions
+  setAutomations: (items: Automation[]) => void;
+  setAutomationsLoading: (loading: boolean) => void;
+  addAutomation: (automation: Automation) => void;
+  updateAutomation: (automation: Automation) => void;
+  removeAutomation: (id: string) => void;
+  setAutomationRuns: (automationId: string, runs: AutomationRun[]) => void;
+  setAutomationRunsLoading: (automationId: string, loading: boolean) => void;
 
   // Actions from all slices
   hydrate: (state: Partial<AppState>, options?: HydrationOptions) => void;
@@ -413,6 +429,8 @@ const defaultState = {
   taskPRs: defaultGitHubState.taskPRs,
   prWatches: defaultGitHubState.prWatches,
   reviewWatches: defaultGitHubState.reviewWatches,
+  automations: defaultAutomationsState.automations,
+  automationRuns: defaultAutomationsState.automationRuns,
   previewPanel: defaultUIState.previewPanel,
   rightPanel: defaultUIState.rightPanel,
   diffs: defaultUIState.diffs,
@@ -480,6 +498,8 @@ function mergeInitialState(initialState?: Partial<AppState>): typeof defaultStat
     taskPRs: { ...defaultState.taskPRs, ...initialState.taskPRs },
     prWatches: { ...defaultState.prWatches, ...initialState.prWatches },
     reviewWatches: { ...defaultState.reviewWatches, ...initialState.reviewWatches },
+    automations: { ...defaultState.automations, ...initialState.automations },
+    automationRuns: { ...defaultState.automationRuns, ...initialState.automationRuns },
     previewPanel: { ...defaultState.previewPanel, ...initialState.previewPanel },
     rightPanel: { ...defaultState.rightPanel, ...initialState.rightPanel },
     diffs: { ...defaultState.diffs, ...initialState.diffs },
@@ -512,6 +532,8 @@ export function createAppStore(initialState?: Partial<AppState>) {
       ...createGitHubSlice(set as any, get as any, api as any),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ...createUISlice(set as any, get as any, api as any),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ...createAutomationsSlice(set as any, get as any, api as any),
       // Override state with merged initial state
       kanban: merged.kanban,
       kanbanMulti: merged.kanbanMulti,
@@ -555,6 +577,8 @@ export function createAppStore(initialState?: Partial<AppState>) {
       taskPRs: merged.taskPRs,
       prWatches: merged.prWatches,
       reviewWatches: merged.reviewWatches,
+      automations: merged.automations,
+      automationRuns: merged.automationRuns,
       previewPanel: merged.previewPanel,
       rightPanel: merged.rightPanel,
       diffs: merged.diffs,
