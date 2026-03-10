@@ -6,6 +6,7 @@ import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { getTerminalTheme } from "@/lib/theme/terminal-theme";
+import { startReconnectLoop } from "./ws-reconnect";
 
 // Debug flag - set to true to see detailed logs
 const DEBUG = false;
@@ -272,6 +273,7 @@ type ConnectWebSocketOptions = {
   isMountedCheck: () => boolean;
   onTimeout: (id: ReturnType<typeof setTimeout>) => void;
   onConnected: () => void;
+  onSocketClose: (event: CloseEvent) => void;
 };
 
 function connectWebSocket({
@@ -287,6 +289,7 @@ function connectWebSocket({
   isMountedCheck,
   onTimeout,
   onConnected,
+  onSocketClose,
 }: ConnectWebSocketOptions) {
   if (attachAddonRef.current) {
     attachAddonRef.current.dispose();
@@ -341,11 +344,16 @@ function connectWebSocket({
       attachAddonRef.current.dispose();
       attachAddonRef.current = null;
     }
+    onSocketClose(event);
   };
   ws.onerror = (error) => {
     log("WebSocket error:", error);
   };
 }
+
+// reconnectDelayMs and startReconnectLoop are in ws-reconnect.ts
+// Re-export reconnectDelayMs for tests that import from this module.
+export { reconnectDelayMs } from "./ws-reconnect";
 
 export function useWebSocketConnection({
   taskId,
@@ -390,33 +398,22 @@ export function useWebSocketConnection({
     log("Resetting terminal buffer for session", sessionId);
     terminal.reset();
 
-    let isMounted = true;
-    let connectTimeout: ReturnType<typeof setTimeout> | null = null;
-    let settleTimeout: ReturnType<typeof setTimeout> | null = null;
-    connectTimeout = setTimeout(() => {
-      if (!isMounted) return;
-      connectWebSocket({
-        sessionId,
-        wsBaseUrl,
-        mode,
-        terminalId,
-        label,
-        terminal,
-        fitAndResize,
-        wsRef,
-        attachAddonRef,
-        isMountedCheck: () => isMounted,
-        onTimeout: (id) => {
-          settleTimeout = id;
-        },
-        onConnected,
-      });
-    }, 150);
+    const stopReconnectLoop = startReconnectLoop({
+      sessionId,
+      wsBaseUrl,
+      mode,
+      terminalId,
+      label,
+      terminal,
+      fitAndResize,
+      wsRef,
+      attachAddonRef,
+      onConnected,
+      connectWebSocket,
+    });
     return () => {
       log("WebSocket cleanup");
-      isMounted = false;
-      if (connectTimeout) clearTimeout(connectTimeout);
-      if (settleTimeout) clearTimeout(settleTimeout);
+      stopReconnectLoop();
       if (attachAddonRef.current) {
         attachAddonRef.current.dispose();
         attachAddonRef.current = null;
