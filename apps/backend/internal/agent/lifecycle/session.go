@@ -504,6 +504,9 @@ func (sm *SessionManager) SendPrompt(
 		return nil, fmt.Errorf("execution %q has no agentctl client", execution.ID)
 	}
 
+	// Signal when this prompt completes so CancelAgent can wait for it.
+	defer beginPromptBarrier(execution)()
+
 	// Inject session trace context so prompt spans become children of the session span
 	if sessionSpan := trace.SpanFromContext(execution.SessionTraceContext()); sessionSpan.SpanContext().IsValid() {
 		ctx = trace.ContextWithSpan(ctx, sessionSpan)
@@ -569,6 +572,17 @@ func (sm *SessionManager) SendPrompt(
 
 	// Wait for completion signal from handleAgentEvent(complete) or stream disconnect.
 	return sm.waitForPromptDone(ctx, execution)
+}
+
+// beginPromptBarrier sets up a completion signal on the execution so CancelAgent
+// can wait for the in-flight SendPrompt to finish before the caller retries.
+// Returns a cleanup function that must be deferred: defer beginPromptBarrier(exec)()
+func beginPromptBarrier(execution *AgentExecution) func() {
+	ch := make(chan struct{})
+	execution.promptFinishedMu.Lock()
+	execution.promptFinished = ch
+	execution.promptFinishedMu.Unlock()
+	return func() { close(ch) }
 }
 
 func (sm *SessionManager) retryPromptAfterReconnect(
