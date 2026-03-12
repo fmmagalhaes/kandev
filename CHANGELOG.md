@@ -2,6 +2,45 @@
 
 All notable changes to Kandev.
 
+## 0.20 - 2026-03-12
+
+### Features
+
+- show auth methods and login guidance on authentication errors ([#422](https://github.com/kdlbs/kandev/pull/422))
+- add ACP-based utility agent inference and generate buttons in changes panel ([#420](https://github.com/kdlbs/kandev/pull/420))
+- add bottom terminal panel with Cmd+J hotkey ([#414](https://github.com/kdlbs/kandev/pull/414))
+- show hotkey in quick chat button tooltip ([#409](https://github.com/kdlbs/kandev/pull/409))
+- add ACP agent variants for Claude, Codex, Copilot, and Amp ([#387](https://github.com/kdlbs/kandev/pull/387))
+- add clickable terminal links with configurable open behavior ([#401](https://github.com/kdlbs/kandev/pull/401))
+- improve mobile kanban view ([#400](https://github.com/kdlbs/kandev/pull/400))
+- auto-update base commit on branch switch ([#399](https://github.com/kdlbs/kandev/pull/399))
+
+### Bug Fixes
+
+- resolve acp chat ux issues with permissions, plans, and tool states ([#428](https://github.com/kdlbs/kandev/pull/428))
+- fetch diff expansion content from working tree instead of HEAD ([#427](https://github.com/kdlbs/kandev/pull/427))
+- reset attachments when switching chat sessions ([#421](https://github.com/kdlbs/kandev/pull/421))
+- resolve CancelAgent race and hide cancel message in clarification recovery ([#423](https://github.com/kdlbs/kandev/pull/423))
+- improve chat input height with context and terminal toggle focus ([#425](https://github.com/kdlbs/kandev/pull/425))
+- recover stuck sessions after agent stream disconnect ([#424](https://github.com/kdlbs/kandev/pull/424))
+- allow dockview layout to shrink on window resize ([#418](https://github.com/kdlbs/kandev/pull/418))
+- prevent escape sequence artifacts and scroll on Cmd+J terminal toggle ([#416](https://github.com/kdlbs/kandev/pull/416))
+- prevent browser shortcut conflict with bottom terminal toggle ([#415](https://github.com/kdlbs/kandev/pull/415))
+- recover from agent MCP timeout during clarification wait ([#413](https://github.com/kdlbs/kandev/pull/413))
+- use merge-base for PR review prompts to avoid reviewing unrelated changes ([#412](https://github.com/kdlbs/kandev/pull/412))
+- wait for workspace readiness in terminal connections ([#411](https://github.com/kdlbs/kandev/pull/411))
+- resolve model selector mismatch for ACP agents ([#410](https://github.com/kdlbs/kandev/pull/410))
+- filter pending comments by session to prevent cross-session leakage ([#408](https://github.com/kdlbs/kandev/pull/408))
+- use integration branch for base commit calculation in git status ([#407](https://github.com/kdlbs/kandev/pull/407))
+- force-load diffs up to selected file for accurate scroll ([#403](https://github.com/kdlbs/kandev/pull/403))
+- use kandev home dir for worktrees, repos, sessions instead of data dir ([#405](https://github.com/kdlbs/kandev/pull/405))
+- resolve ACP model ID mismatch and promote ACP agents as default ([#404](https://github.com/kdlbs/kandev/pull/404))
+- add timeout and retry for git status polling commands ([#402](https://github.com/kdlbs/kandev/pull/402))
+
+### Refactoring
+
+- consolidate commit and PR dialogs to use vcs-dialogs ([#426](https://github.com/kdlbs/kandev/pull/426))
+
 ## 0.19 - 2026-03-09
 
 ### Features
