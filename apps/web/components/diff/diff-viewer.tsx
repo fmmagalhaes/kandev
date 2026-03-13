@@ -38,6 +38,10 @@ interface DiffViewerProps {
   enableExpansion?: boolean;
   /** Base git ref for fetching old content (e.g., "origin/main", "HEAD~1") */
   baseRef?: string;
+  /** Controlled expand-unchanged state (when provided, component is controlled) */
+  expandUnchanged?: boolean;
+  /** Callback when expand-unchanged is toggled (controlled mode) */
+  onToggleExpandUnchanged?: () => void;
 }
 
 const SCALAR_PROP_KEYS: (keyof DiffViewerProps)[] = [
@@ -53,6 +57,8 @@ const SCALAR_PROP_KEYS: (keyof DiffViewerProps)[] = [
   "wordWrap",
   "enableExpansion",
   "baseRef",
+  "expandUnchanged",
+  "onToggleExpandUnchanged",
 ];
 
 const DATA_KEYS: (keyof FileDiffData)[] = ["filePath", "diff", "oldContent", "newContent"];
@@ -100,6 +106,14 @@ function arePropsEqual(prevProps: DiffViewerProps, nextProps: DiffViewerProps): 
   return areCommentsEqual(prevProps.comments, nextProps.comments);
 }
 
+function NoDiffPlaceholder({ className }: { className?: string }) {
+  return (
+    <div className={cn("rounded-md bg-muted/20 p-4 text-muted-foreground text-xs", className)}>
+      No diff available
+    </div>
+  );
+}
+
 export const DiffViewer = memo(function DiffViewer({
   data,
   enableComments = false,
@@ -118,11 +132,17 @@ export const DiffViewer = memo(function DiffViewer({
   wordWrap: wordWrapProp,
   enableExpansion = false,
   baseRef,
+  expandUnchanged: expandUnchangedProp,
+  onToggleExpandUnchanged: onToggleExpandUnchangedProp,
 }: DiffViewerProps) {
   const [wordWrapLocal, setWordWrap] = useState(false);
   const wordWrap = wordWrapProp ?? wordWrapLocal;
-  const [expandUnchanged, setExpandUnchanged] = useState(false);
-  const toggleExpandUnchanged = useCallback(() => setExpandUnchanged((v) => !v), []);
+  const [expandUnchangedLocal, setExpandUnchangedLocal] = useState(false);
+  const expandUnchanged = expandUnchangedProp ?? expandUnchangedLocal;
+  const toggleExpandUnchanged = useCallback(() => {
+    if (onToggleExpandUnchangedProp) onToggleExpandUnchangedProp();
+    else setExpandUnchangedLocal((v) => !v);
+  }, [onToggleExpandUnchangedProp]);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   const state = useDiffViewerState({
@@ -182,13 +202,7 @@ export const DiffViewer = memo(function DiffViewer({
   const controlledSelection = state.showCommentForm ? state.selectedLines : null;
 
   if (!state.fileDiffMetadata) {
-    return (
-      <div
-        className={cn("rounded-md  bg-muted/20 p-4 text-muted-foreground", "text-xs", className)}
-      >
-        No diff available
-      </div>
-    );
+    return <NoDiffPlaceholder className={className} />;
   }
 
   return (

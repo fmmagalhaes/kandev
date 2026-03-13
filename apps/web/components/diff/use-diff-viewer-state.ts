@@ -189,7 +189,7 @@ type CommentHandlerOpts = {
   externalComments?: DiffComment[];
   data: FileDiffData;
   sessionId?: string;
-  addComment: (range: SelectedLineRange, content: string) => void;
+  addComment: (range: SelectedLineRange, content: string) => DiffComment;
   removeComment: (commentId: string) => void;
   updateComment: (commentId: string, updates: Partial<DiffComment>) => void;
   setEditingComment: (commentId: string | null) => void;
@@ -246,11 +246,8 @@ function useDiffViewerCommentHandlers(opts: CommentHandlerOpts) {
           runAfter?.(comment);
         }
       } else if (sessionId) {
-        addComment(selectedLines, content);
-        if (runAfter) {
-          const comment = createCommentFromSelection(content);
-          if (comment) runAfter(comment);
-        }
+        const stored = addComment(selectedLines, content);
+        if (runAfter && stored) runAfter(stored);
       }
       setShowCommentForm(false);
       setSelectedLines(null);

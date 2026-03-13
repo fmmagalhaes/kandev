@@ -25,7 +25,7 @@ interface UseDiffCommentsReturn {
   /** Annotations formatted for @pierre/diffs */
   annotations: CommentAnnotation[];
   /** Add a new comment */
-  addComment: (range: SelectedLineRange, text: string) => void;
+  addComment: (range: SelectedLineRange, text: string) => DiffComment;
   /** Remove a comment */
   removeComment: (commentId: string) => void;
   /** Update a comment */
@@ -91,6 +91,7 @@ export function useDiffComments({
         description: "Your comment will be sent with your next message.",
         duration: 2000,
       });
+      return comment;
     },
     [sessionId, filePath, diff, newContent, oldContent, storeAddComment],
   );

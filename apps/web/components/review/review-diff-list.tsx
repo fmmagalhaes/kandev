@@ -6,7 +6,13 @@ import {
   IconArrowBackUp,
   IconChevronDown,
   IconChevronRight,
+  IconCopy,
+  IconFold,
+  IconFoldDown,
+  IconLayoutColumns,
+  IconLayoutRows,
   IconPencil,
+  IconTextWrap,
 } from "@tabler/icons-react";
 import { Checkbox } from "@kandev/ui/checkbox";
 import { Button } from "@kandev/ui/button";
@@ -17,6 +23,7 @@ import { FileActionsDropdown } from "@/components/editors/file-actions-dropdown"
 import { getWebSocketClient } from "@/lib/ws/connection";
 import { requestFileContent, updateFileContent } from "@/lib/ws/workspace-files";
 import { generateUnifiedDiff, calculateHash } from "@/lib/utils/file-diff";
+import { useGlobalViewMode } from "@/hooks/use-global-view-mode";
 import { useAppStore } from "@/components/state-provider";
 import { useRunComment } from "@/hooks/domains/comments/use-run-comment";
 import type { DiffComment } from "@/lib/diff/types";
@@ -160,28 +167,154 @@ function useAutoMarkOnScroll({
   return scrollSentinelRef;
 }
 
+const iconBtn = "h-6 w-6 p-0 cursor-pointer opacity-60 hover:opacity-100";
+const iconBtnActive = "h-6 w-6 p-0 cursor-pointer opacity-100 bg-muted";
+
+type FileDiffToolbarProps = {
+  diff: string;
+  filePath: string;
+  sessionId: string;
+  source: string;
+  wordWrap: boolean;
+  expandUnchanged: boolean;
+  onDiscard: () => void;
+  onOpenFile?: (filePath: string) => void;
+  onToggleExpandUnchanged: () => void;
+  onToggleWordWrap: () => void;
+};
+
+function ToolbarIconBtn({
+  onClick,
+  tooltip,
+  active,
+  children,
+  className,
+}: {
+  onClick: () => void;
+  tooltip: string;
+  active?: boolean;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          type="button"
+          aria-label={tooltip}
+          aria-pressed={active}
+          variant="ghost"
+          size="sm"
+          className={className ?? (active ? iconBtnActive : iconBtn)}
+          onClick={onClick}
+        >
+          {children}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{tooltip}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+function FileDiffToolbar(props: FileDiffToolbarProps) {
+  const {
+    diff,
+    filePath,
+    sessionId,
+    source,
+    wordWrap,
+    expandUnchanged,
+    onDiscard,
+    onOpenFile,
+    onToggleExpandUnchanged,
+    onToggleWordWrap,
+  } = props;
+  const [globalViewMode, setGlobalViewMode] = useGlobalViewMode();
+  const handleCopyDiff = useCallback(() => {
+    navigator.clipboard.writeText(diff || "");
+  }, [diff]);
+  const handleToggleViewMode = useCallback(
+    () => setGlobalViewMode(globalViewMode === "split" ? "unified" : "split"),
+    [globalViewMode, setGlobalViewMode],
+  );
+  return (
+    <div className="flex items-center gap-0.5">
+      <ToolbarIconBtn onClick={handleCopyDiff} tooltip="Copy diff">
+        <IconCopy className="h-3.5 w-3.5" />
+      </ToolbarIconBtn>
+      <ToolbarIconBtn
+        onClick={onToggleExpandUnchanged}
+        tooltip={expandUnchanged ? "Collapse unchanged" : "Expand all"}
+        active={expandUnchanged}
+      >
+        {expandUnchanged ? (
+          <IconFold className="h-3.5 w-3.5" />
+        ) : (
+          <IconFoldDown className="h-3.5 w-3.5" />
+        )}
+      </ToolbarIconBtn>
+      <ToolbarIconBtn onClick={onToggleWordWrap} tooltip="Toggle word wrap" active={wordWrap}>
+        <IconTextWrap className="h-3.5 w-3.5" />
+      </ToolbarIconBtn>
+      <ToolbarIconBtn
+        onClick={handleToggleViewMode}
+        tooltip={globalViewMode === "split" ? "Switch to unified view" : "Switch to split view"}
+      >
+        {globalViewMode === "split" ? (
+          <IconLayoutRows className="h-3.5 w-3.5" />
+        ) : (
+          <IconLayoutColumns className="h-3.5 w-3.5" />
+        )}
+      </ToolbarIconBtn>
+      {onOpenFile && (
+        <ToolbarIconBtn onClick={() => onOpenFile(filePath)} tooltip="Edit">
+          <IconPencil className="h-3.5 w-3.5" />
+        </ToolbarIconBtn>
+      )}
+      <FileActionsDropdown filePath={filePath} sessionId={sessionId} size="xs" />
+      {source === "uncommitted" && (
+        <ToolbarIconBtn
+          onClick={onDiscard}
+          tooltip="Revert changes"
+          className="h-6 w-6 p-0 cursor-pointer opacity-60 hover:opacity-100 hover:text-destructive"
+        >
+          <IconArrowBackUp className="h-3.5 w-3.5" />
+        </ToolbarIconBtn>
+      )}
+    </div>
+  );
+}
+
 type FileDiffHeaderProps = {
   file: ReviewFile;
   isReviewed: boolean;
   isStale: boolean;
   sessionId: string;
   collapsed: boolean;
+  wordWrap: boolean;
+  expandUnchanged: boolean;
   onCheckboxChange: (checked: boolean | "indeterminate") => void;
   onDiscard: () => void;
   onOpenFile?: (filePath: string) => void;
   onToggleCollapse: () => void;
+  onToggleExpandUnchanged: () => void;
+  onToggleWordWrap: () => void;
 };
 
 function FileDiffHeader({
   file,
   isReviewed,
   isStale,
-  sessionId,
   collapsed,
+  wordWrap,
+  expandUnchanged,
+  sessionId,
   onCheckboxChange,
   onDiscard,
   onOpenFile,
   onToggleCollapse,
+  onToggleExpandUnchanged,
+  onToggleWordWrap,
 }: FileDiffHeaderProps) {
   return (
     <div className="sticky top-0 z-10 flex items-center gap-2 px-4 py-2 bg-card/95 backdrop-blur-sm border-b border-border/50">
@@ -212,39 +345,18 @@ function FileDiffHeader({
         {file.additions > 0 && file.deletions > 0 && " / "}
         {file.deletions > 0 && <span className="text-rose-500">-{file.deletions}</span>}
       </span>
-      <div className="flex items-center gap-0.5">
-        {onOpenFile && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 w-6 p-0 cursor-pointer opacity-60 hover:opacity-100"
-                onClick={() => onOpenFile(file.path)}
-              >
-                <IconPencil className="h-3.5 w-3.5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Edit</TooltipContent>
-          </Tooltip>
-        )}
-        <FileActionsDropdown filePath={file.path} sessionId={sessionId} size="xs" />
-        {file.source === "uncommitted" && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 w-6 p-0 cursor-pointer opacity-60 hover:opacity-100 hover:text-destructive"
-                onClick={onDiscard}
-              >
-                <IconArrowBackUp className="h-3.5 w-3.5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Revert changes</TooltipContent>
-          </Tooltip>
-        )}
-      </div>
+      <FileDiffToolbar
+        diff={file.diff}
+        filePath={file.path}
+        sessionId={sessionId}
+        source={file.source}
+        wordWrap={wordWrap}
+        expandUnchanged={expandUnchanged}
+        onDiscard={onDiscard}
+        onOpenFile={onOpenFile}
+        onToggleExpandUnchanged={onToggleExpandUnchanged}
+        onToggleWordWrap={onToggleWordWrap}
+      />
     </div>
   );
 }
@@ -288,6 +400,23 @@ async function revertBlock(sessionId: string, filePath: string, info: RevertBloc
   }
 }
 
+function useScrollIntoViewOnSelect(
+  isSelected: boolean | undefined,
+  sectionRef: React.RefObject<HTMLDivElement | null> | undefined,
+  setCollapsed: React.Dispatch<React.SetStateAction<boolean>>,
+) {
+  useEffect(() => {
+    if (isSelected) {
+      setCollapsed(false);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          sectionRef?.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      });
+    }
+  }, [isSelected, sectionRef, setCollapsed]);
+}
+
 function FileDiffSection({
   file,
   isReviewed,
@@ -304,23 +433,19 @@ function FileDiffSection({
   scrollContainer,
 }: FileDiffSectionProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const [expandUnchanged, setExpandUnchanged] = useState(false);
+  const [localWordWrap, setLocalWordWrap] = useState<boolean | undefined>(undefined);
+  const effectiveWordWrap = localWordWrap ?? wordWrap;
   const handleToggleCollapse = useCallback(() => setCollapsed((v) => !v), []);
+  const handleToggleExpandUnchanged = useCallback(() => setExpandUnchanged((v) => !v), []);
+  const handleToggleWordWrap = useCallback(
+    () => setLocalWordWrap((v) => !(v ?? wordWrap)),
+    [wordWrap],
+  );
   const { isVisible, sentinelRef } = useLazyVisible(scrollContainer);
   // Force load when: visible via intersection observer, or forceLoad is true (all files up to selected)
   const shouldRenderContent = isVisible || forceLoad;
-  useEffect(() => {
-    if (isSelected) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing collapsed state from parent selection prop
-      setCollapsed(false);
-      // Wait for all diffs above to fully render before scrolling
-      // Double rAF ensures layout is complete after React commit
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          sectionRef?.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-        });
-      });
-    }
-  }, [isSelected, sectionRef]);
+  useScrollIntoViewOnSelect(isSelected, sectionRef, setCollapsed);
   const scrollSentinelRef = useAutoMarkOnScroll({
     autoMarkOnScroll,
     isReviewed,
@@ -355,29 +480,34 @@ function FileDiffSection({
         isStale={isStale}
         sessionId={sessionId}
         collapsed={collapsed}
+        wordWrap={effectiveWordWrap}
+        expandUnchanged={expandUnchanged}
         onCheckboxChange={handleCheckboxChange}
         onDiscard={handleDiscard}
         onOpenFile={onOpenFile}
         onToggleCollapse={handleToggleCollapse}
+        onToggleExpandUnchanged={handleToggleExpandUnchanged}
+        onToggleWordWrap={handleToggleWordWrap}
       />
       <div ref={sentinelRef} />
       {!collapsed &&
         (shouldRenderContent && file.diff ? (
-          <div className="">
-            <FileDiffViewer
-              filePath={file.path}
-              diff={file.diff}
-              status={file.status}
-              enableComments
-              enableAcceptReject
-              onRevertBlock={handleRevertBlock}
-              onCommentRun={handleCommentRun}
-              sessionId={sessionId}
-              wordWrap={wordWrap}
-              enableExpansion={true}
-              baseRef="HEAD"
-            />
-          </div>
+          <FileDiffViewer
+            filePath={file.path}
+            diff={file.diff}
+            status={file.status}
+            enableComments
+            enableAcceptReject
+            onRevertBlock={handleRevertBlock}
+            onCommentRun={handleCommentRun}
+            sessionId={sessionId}
+            wordWrap={effectiveWordWrap}
+            enableExpansion={true}
+            baseRef="HEAD"
+            hideHeader
+            expandUnchanged={expandUnchanged}
+            onToggleExpandUnchanged={handleToggleExpandUnchanged}
+          />
         ) : (
           <div className="flex items-center justify-center py-12 text-muted-foreground text-sm">
             Loading diff...
