@@ -6,6 +6,7 @@ import (
 
 	"github.com/kandev/kandev/internal/orchestrator"
 	"github.com/kandev/kandev/internal/task/dto"
+	"github.com/kandev/kandev/internal/task/models"
 	"github.com/kandev/kandev/internal/task/service"
 	v1 "github.com/kandev/kandev/pkg/api/v1"
 	ws "github.com/kandev/kandev/pkg/websocket"
@@ -123,6 +124,19 @@ func (h *TaskHandlers) wsCreateTask(ctx context.Context, msg *ws.Message) (*ws.M
 			DefaultBranch: r.DefaultBranch,
 			GitHubURL:     r.GitHubURL,
 		})
+	}
+
+	// When not starting the agent immediately, persist profile IDs in task metadata
+	// so handleTaskMovedNoSession can retrieve them when the task is later dragged
+	// to a step with auto_start_agent.
+	if !req.StartAgent && req.AgentProfileID != "" {
+		if req.Metadata == nil {
+			req.Metadata = make(map[string]interface{})
+		}
+		req.Metadata[models.MetaKeyAgentProfileID] = req.AgentProfileID
+		if req.ExecutorProfileID != "" {
+			req.Metadata[models.MetaKeyExecutorProfileID] = req.ExecutorProfileID
+		}
 	}
 
 	title := strings.TrimSpace(req.Title)
