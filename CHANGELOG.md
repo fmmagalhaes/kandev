@@ -2,6 +2,20 @@
 
 All notable changes to Kandev.
 
+## 0.23 - 2026-03-19
+
+### Features
+
+- make quick chats independent of workflows ([#434](https://github.com/kdlbs/kandev/pull/434))
+
+### Bug Fixes
+
+- improve keyboard navigation for macOS shortcuts ([#448](https://github.com/kdlbs/kandev/pull/448))
+- include uncommitted changes in review dialog cumulative diff ([#447](https://github.com/kdlbs/kandev/pull/447))
+- show create new task command in dock view command palette ([#446](https://github.com/kdlbs/kandev/pull/446))
+- prevent mermaid false positive detection ([#443](https://github.com/kdlbs/kandev/pull/443))
+- prevent duplicate workflow on create ([#438](https://github.com/kdlbs/kandev/pull/438))
+
 ## 0.22 - 2026-03-14
 
 ### Features
