@@ -1,10 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import {
   IconGitCommit,
   IconGitPullRequest,
   IconCloudUpload,
   IconChevronDown,
+  IconChevronRight,
   IconLoader2,
 } from "@tabler/icons-react";
 
@@ -54,6 +56,7 @@ function TimelineSection({
   action,
   isLast,
   children,
+  collapsible = true,
   "data-testid": testId,
 }: {
   dotColor: string;
@@ -62,8 +65,12 @@ function TimelineSection({
   action?: React.ReactNode;
   isLast?: boolean;
   children?: React.ReactNode;
+  collapsible?: boolean;
   "data-testid"?: string;
 }) {
+  const [collapsed, setCollapsed] = useState(false);
+  const canCollapse = collapsible && !!label;
+
   return (
     <div className="relative flex gap-2.5" data-testid={testId}>
       {/* Vertical line + dot */}
@@ -77,18 +84,38 @@ function TimelineSection({
         {/* Header */}
         {label && (
           <div className="flex items-center justify-between gap-2 -mt-0.5 mb-1">
-            <span className="text-[11px] font-medium uppercase tracking-wider text-foreground/70">
-              {label}
-              {typeof count === "number" && (
-                <span className="ml-1 text-muted-foreground/50 font-normal">({count})</span>
-              )}
-            </span>
+            {canCollapse ? (
+              <button
+                type="button"
+                className="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wider text-foreground/70 cursor-pointer hover:text-foreground/90"
+                onClick={() => setCollapsed((c) => !c)}
+                aria-expanded={!collapsed}
+                data-testid={`${testId ?? label.toLowerCase()}-collapse-toggle`}
+              >
+                {label}
+                {typeof count === "number" && (
+                  <span className="text-muted-foreground/50 font-normal">({count})</span>
+                )}
+                {collapsed ? (
+                  <IconChevronRight className="h-3 w-3 text-muted-foreground/50" />
+                ) : (
+                  <IconChevronDown className="h-3 w-3 text-muted-foreground/50" />
+                )}
+              </button>
+            ) : (
+              <span className="text-[11px] font-medium uppercase tracking-wider text-foreground/70">
+                {label}
+                {typeof count === "number" && (
+                  <span className="ml-1 text-muted-foreground/50 font-normal">({count})</span>
+                )}
+              </span>
+            )}
             {action}
           </div>
         )}
 
         {/* Children (file list, buttons, etc.) */}
-        {children}
+        {!collapsed && children}
       </div>
     </div>
   );
@@ -359,6 +386,7 @@ export function PRFilesSection({ files, isLast, onOpenDiff }: PRFilesSectionProp
       label="PR Changes"
       count={files.length}
       isLast={isLast}
+      data-testid="pr-changes-section"
     >
       {files.length > 0 && (
         <ul className="space-y-0.5">
@@ -428,6 +456,7 @@ export function PRCommitsSection({ commits, isLast, onOpenCommitDetail }: PRComm
       label="PR Commits"
       count={commits.length}
       isLast={isLast}
+      data-testid="pr-commits-timeline-section"
     >
       <ul className="space-y-0.5">
         {commits.map((commit, index) => (
