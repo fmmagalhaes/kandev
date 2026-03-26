@@ -344,24 +344,25 @@ func (m *Manager) fetchBranchToLocal(ctx context.Context, repoPath, branch strin
 
 	fetchCmd := m.newNonInteractiveGitCmd(fetchCtx, repoPath, "fetch", "origin", branch+":"+branch)
 	if output, err := fetchCmd.CombinedOutput(); err != nil {
+		outputStr := string(output)
 		m.logger.Warn("fetch from origin failed, checking local branch",
 			zap.String("branch", branch),
-			zap.String("output", string(output)),
+			zap.String("output", outputStr),
 			zap.Error(err))
 
 		// Fall back to local branch if it exists.
 		if !m.branchExists(repoPath, branch) {
-			return nil, fmt.Errorf("branch %q not found locally or on remote: %s", branch, string(output))
+			return nil, fmt.Errorf("branch %q not found locally or on remote: %s", branch, outputStr)
 		}
 
-		reason := classifyGitFallbackReason(err, string(output), fetchCtx.Err())
+		reason := classifyGitFallbackReason(err, outputStr, fetchCtx.Err())
 		warning := fmt.Sprintf("Could not fetch latest from origin (%s). Using local version of branch %q which may be outdated.", reason, branch)
 		m.logger.Info("using local branch (fetch failed)",
 			zap.String("branch", branch),
 			zap.String("warning", warning))
 		return &FetchBranchResult{
 			Warning:       warning,
-			WarningDetail: strings.TrimSpace(string(output)),
+			WarningDetail: strings.TrimSpace(outputStr),
 		}, nil
 	}
 

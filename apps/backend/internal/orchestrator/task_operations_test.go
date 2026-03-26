@@ -166,12 +166,19 @@ func TestStartCreatedSession_NotInCreatedState(t *testing.T) {
 // mockMessageCreator implements MessageCreator for testing.
 // Only CreateUserMessage is tracked; all other methods are no-op stubs.
 type mockMessageCreator struct {
-	userMessages []mockUserMessage
+	userMessages    []mockUserMessage
+	sessionMessages []mockSessionMessage
 }
 
 type mockUserMessage struct {
 	taskID, content, sessionID, turnID string
 	metadata                           map[string]interface{}
+}
+
+type mockSessionMessage struct {
+	taskID, content, sessionID, messageType, turnID string
+	metadata                                        map[string]interface{}
+	requestsInput                                   bool
 }
 
 func (m *mockMessageCreator) CreateUserMessage(_ context.Context, taskID, content, sessionID, turnID string, metadata map[string]interface{}) error {
@@ -191,7 +198,16 @@ func (m *mockMessageCreator) UpdateToolCallMessage(context.Context, string, stri
 	return nil
 }
 
-func (m *mockMessageCreator) CreateSessionMessage(context.Context, string, string, string, string, string, map[string]interface{}, bool) error {
+func (m *mockMessageCreator) CreateSessionMessage(_ context.Context, taskID, content, sessionID, messageType, turnID string, metadata map[string]interface{}, requestsInput bool) error {
+	m.sessionMessages = append(m.sessionMessages, mockSessionMessage{
+		taskID:        taskID,
+		content:       content,
+		sessionID:     sessionID,
+		messageType:   messageType,
+		turnID:        turnID,
+		metadata:      metadata,
+		requestsInput: requestsInput,
+	})
 	return nil
 }
 

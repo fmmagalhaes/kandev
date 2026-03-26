@@ -895,6 +895,48 @@ esac
 	}
 }
 
+func TestFetchBranchToLocal_MissingRemoteRefReturnsError(t *testing.T) {
+	scriptDir := writeFakeGitScript(t, `
+case "${1:-}" in
+  fetch)
+    echo "fatal: couldn't find remote ref feature/pr-branch" >&2
+    exit 128
+    ;;
+  rev-parse)
+    # Simulate branch does NOT exist locally
+    if [ "${2:-}" = "--verify" ]; then
+      exit 1
+    fi
+    exit 0
+    ;;
+  *)
+    exit 0
+    ;;
+esac
+`)
+	t.Setenv("PATH", scriptDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	cfg := newTestConfig(t)
+	log := newTestLogger()
+	store := newMockStore()
+	mgr, err := NewManager(cfg, store, log)
+	if err != nil {
+		t.Fatalf("NewManager failed: %v", err)
+	}
+
+	repoPath := t.TempDir()
+	_, err = mgr.fetchBranchToLocal(context.Background(), repoPath, "feature/pr-branch")
+	if err == nil {
+		t.Fatal("fetchBranchToLocal() should fail when remote ref is missing and no local branch")
+	}
+	if !strings.Contains(err.Error(), "not found locally or on remote") {
+		t.Fatalf("unexpected error message: %v", err)
+	}
+	if !strings.Contains(err.Error(), "couldn't find remote ref") {
+		t.Fatalf("expected error to contain git output, got: %v", err)
+	}
+}
+
 func TestClassifyGitFallbackReason_AuthPrompt(t *testing.T) {
 	reason := classifyGitFallbackReason(nil, "fatal: could not read Username for 'https://github.com'", nil)
 	if reason != "non_interactive_auth_failed" {

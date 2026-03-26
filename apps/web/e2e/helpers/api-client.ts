@@ -57,6 +57,51 @@ export type MockCheckRun = {
   html_url?: string;
 };
 
+function setIf(body: Record<string, unknown>, key: string, value: unknown) {
+  if (value !== undefined && value !== null) body[key] = value;
+}
+
+type CreateTaskOpts = {
+  description?: string;
+  workflow_id?: string;
+  workflow_step_id?: string;
+  agent_profile_id?: string;
+  repository_ids?: string[];
+  repositories?: Array<{ repository_id: string; base_branch?: string; checkout_branch?: string }>;
+  plan_mode?: boolean;
+  metadata?: Record<string, unknown>;
+};
+
+function buildTaskMetadata(opts: CreateTaskOpts): Record<string, unknown> | undefined {
+  const meta: Record<string, unknown> = { ...(opts.metadata ?? {}) };
+  if (opts.agent_profile_id && meta.agent_profile_id == null) {
+    meta.agent_profile_id = opts.agent_profile_id;
+  }
+  return Object.keys(meta).length > 0 ? meta : undefined;
+}
+
+function buildCreateTaskBody(
+  workspaceId: string,
+  title: string,
+  opts?: CreateTaskOpts,
+): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    workspace_id: workspaceId,
+    title,
+    description: opts?.description ?? "",
+  };
+  setIf(body, "workflow_id", opts?.workflow_id);
+  setIf(body, "workflow_step_id", opts?.workflow_step_id);
+  setIf(body, "metadata", opts ? buildTaskMetadata(opts) : undefined);
+  setIf(
+    body,
+    "repositories",
+    opts?.repositories ?? opts?.repository_ids?.map((id) => ({ repository_id: id })),
+  );
+  if (opts?.plan_mode) body.plan_mode = true;
+  return body;
+}
+
 /**
  * HTTP API client for seeding test data via the backend REST API.
  */
@@ -112,22 +157,19 @@ export class ApiClient {
       agent_profile_id?: string;
       /** Repository IDs to associate with the task (required for agent execution). */
       repository_ids?: string[];
+      /** Full repository entries with optional checkout_branch / base_branch. */
+      repositories?: Array<{
+        repository_id: string;
+        base_branch?: string;
+        checkout_branch?: string;
+      }>;
       /** When true, task is placed at position 0 regardless of is_start_step. */
       plan_mode?: boolean;
+      /** Extra metadata to store on the task. */
+      metadata?: Record<string, unknown>;
     },
   ): Promise<CreateTaskResponse> {
-    return this.request("POST", "/api/v1/tasks", {
-      workspace_id: workspaceId,
-      title,
-      description: opts?.description ?? "",
-      ...(opts?.workflow_id ? { workflow_id: opts.workflow_id } : {}),
-      ...(opts?.workflow_step_id ? { workflow_step_id: opts.workflow_step_id } : {}),
-      ...(opts?.agent_profile_id ? { metadata: { agent_profile_id: opts.agent_profile_id } } : {}),
-      ...(opts?.repository_ids
-        ? { repositories: opts.repository_ids.map((id) => ({ repository_id: id })) }
-        : {}),
-      ...(opts?.plan_mode ? { plan_mode: true } : {}),
-    });
+    return this.request("POST", "/api/v1/tasks", buildCreateTaskBody(workspaceId, title, opts));
   }
 
   async listAgents(): Promise<{ agents: Agent[]; total: number }> {
@@ -496,6 +538,34 @@ export class ApiClient {
     await this.request("POST", "/api/v1/github/mock/task-prs", data);
   }
 
+  async mockGitHubGetStatus(): Promise<{
+    authenticated: boolean;
+    username: string;
+    auth_method: string;
+  }> {
+    return this.request("GET", "/api/v1/github/status");
+  }
+
+  // --- Session ---
+
+  async listSessionMessages(
+    sessionId: string,
+  ): Promise<{ messages: Array<{ id: string; content: string; author_type: string }> }> {
+    return this.request("GET", `/api/v1/task-sessions/${sessionId}/messages`);
+  }
+
+  async listTasks(
+    workspaceId: string,
+  ): Promise<{ tasks: Array<{ id: string; title: string; workflow_step_id?: string }> }> {
+    return this.request("GET", `/api/v1/workspaces/${workspaceId}/tasks`);
+  }
+
+  async listTaskSessions(
+    taskId: string,
+  ): Promise<{ sessions: Array<{ id: string; state: string }> }> {
+    return this.request("GET", `/api/v1/tasks/${taskId}/sessions`);
+  }
+
   // --- GitHub Review Watch ---
 
   async createReviewWatch(
@@ -522,29 +592,7 @@ export class ApiClient {
     });
   }
 
-  async triggerReviewWatch(watchId: string): Promise<{ new_prs: number }> {
-    return this.request("POST", `/api/v1/github/watches/review/${watchId}/trigger`);
-  }
-
-  async mockGitHubGetStatus(): Promise<{
-    authenticated: boolean;
-    username: string;
-    auth_method: string;
-  }> {
-    return this.request("GET", "/api/v1/github/status");
-  }
-
-  // --- Session ---
-
-  async listSessionMessages(
-    sessionId: string,
-  ): Promise<{ messages: Array<{ id: string; content: string; author_type: string }> }> {
-    return this.request("GET", `/api/v1/task-sessions/${sessionId}/messages`);
-  }
-
-  async listTasks(
-    workspaceId: string,
-  ): Promise<{ tasks: Array<{ id: string; title: string; workflow_step_id?: string }> }> {
-    return this.request("GET", `/api/v1/workspaces/${workspaceId}/tasks`);
+  async triggerReviewWatch(watchId: string): Promise<{ new_prs: number; cleaned?: number }> {
+    return this.request("POST", `/api/v1/github/watches/review/${watchId}/trigger`, undefined);
   }
 }

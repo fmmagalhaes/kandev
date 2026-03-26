@@ -13,6 +13,8 @@ package orchestrator
 import (
 	"context"
 	"errors"
+	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -200,6 +202,11 @@ type Service struct {
 	// Used to suppress stale ready events and avoid draining queued prompts mid-reset.
 	resetInProgressSessions sync.Map
 
+	// suppressToast: sessionID -> true. Set by failure handlers that create
+	// guidance messages with actions. Cleared by updateTaskSessionState which
+	// adds suppress_toast to the WS event so the frontend skips the error toast.
+	suppressToast sync.Map
+
 	// clarificationWatchdogs tracks active clarification primary-path resume watchdogs.
 	// key: "<session_id>::<pending_id>", value: *clarificationWatchdogEntry
 	clarificationWatchdogs sync.Map
@@ -279,6 +286,7 @@ func NewService(
 		s.updateTaskSessionState(ctx, taskID, sessionID, state, errorMessage, true)
 		return nil
 	})
+	exec.SetOnLaunchFailed(s.handleSessionLaunchFailed)
 	exec.SetOnAgentStartFailed(s.handleAgentStartFailed)
 	if caps, ok := agentManager.(executor.ExecutorTypeCapabilities); ok {
 		exec.SetCapabilities(caps)
@@ -728,6 +736,91 @@ func canResumeRunning(running *models.ExecutorRunning) bool {
 		return true
 	}
 	return models.IsAlwaysResumableRuntime(running.Runtime)
+}
+
+func isMissingMergedPRBranchError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "couldn't find remote ref") ||
+		(strings.Contains(msg, "not found locally or on remote") && strings.Contains(msg, "branch")) ||
+		(strings.Contains(msg, "pathspec") && strings.Contains(msg, "did not match"))
+}
+
+var (
+	quotedBranchPattern   = regexp.MustCompile(`branch "([^"]+)"`)
+	remoteRefPattern      = regexp.MustCompile(`remote ref ([^\s]+)`)
+	pathspecBranchPattern = regexp.MustCompile(`pathspec '([^']+)'`)
+)
+
+func extractMissingBranchName(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := err.Error()
+	if match := quotedBranchPattern.FindStringSubmatch(msg); len(match) == 2 {
+		return strings.TrimSpace(match[1])
+	}
+	if match := remoteRefPattern.FindStringSubmatch(msg); len(match) == 2 {
+		return strings.TrimSpace(match[1])
+	}
+	if match := pathspecBranchPattern.FindStringSubmatch(msg); len(match) == 2 {
+		return strings.TrimSpace(match[1])
+	}
+	return ""
+}
+
+func (s *Service) handleSessionLaunchFailed(ctx context.Context, taskID, sessionID string, launchErr error) {
+	if s.messageCreator == nil || !isMissingMergedPRBranchError(launchErr) {
+		return
+	}
+
+	branch := extractMissingBranchName(launchErr)
+	content := "This task references a PR branch that no longer exists on remote (likely merged and deleted)."
+	if branch != "" {
+		content = "The remote PR branch \"" + branch + "\" no longer exists (likely merged and deleted)."
+	}
+	metadata := map[string]interface{}{
+		"variant":        "warning",
+		"failure_kind":   "missing_pr_branch",
+		"missing_branch": branch,
+		"actions": []map[string]interface{}{
+			{
+				"type":    "archive_task",
+				"label":   "Archive task",
+				"tooltip": "Keep task history and hide it from active work",
+				"icon":    "archive",
+				"test_id": "missing-branch-archive-button",
+			},
+			{
+				"type":    "delete_task",
+				"label":   "Delete task",
+				"tooltip": "Permanently remove this task",
+				"variant": "destructive",
+				"icon":    "trash",
+				"test_id": "missing-branch-delete-button",
+			},
+		},
+	}
+	s.suppressToast.Store(sessionID, true)
+	msgCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if err := s.messageCreator.CreateSessionMessage(
+		msgCtx,
+		taskID,
+		content,
+		sessionID,
+		string(v1.MessageTypeStatus),
+		"", // No turn — agent never started, avoid lazily creating a synthetic turn.
+		metadata,
+		false,
+	); err != nil {
+		s.logger.Warn("failed to create missing PR branch launch failure message",
+			zap.String("task_id", taskID),
+			zap.String("session_id", sessionID),
+			zap.Error(err))
+	}
 }
 
 // IsRunning returns true if the service is running
