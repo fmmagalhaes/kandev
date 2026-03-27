@@ -147,9 +147,8 @@ export function KanbanDisplayDropdown() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" className="cursor-pointer">
-          <IconAdjustmentsHorizontal className="h-4 w-4 mr-2" />
-          Display
+        <Button variant="outline" size="icon" className="cursor-pointer">
+          <IconAdjustmentsHorizontal className="h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-[280px] p-3">

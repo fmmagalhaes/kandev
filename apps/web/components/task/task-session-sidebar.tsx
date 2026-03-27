@@ -23,6 +23,8 @@ import { launchSession } from "@/lib/services/session-launch-service";
 import { buildPrepareRequest } from "@/lib/services/session-launch-helpers";
 import { getSessionInfoForTask } from "@/lib/utils/session-info";
 import { useArchivedTaskState } from "./task-archived-context";
+import { isMultiRepoTask, getMultiRepoSubTasks } from "@/lib/demo/multi-repo-task";
+import type { WorkflowSnapshotData } from "@/lib/state/slices/kanban/types";
 
 /** Find a task across all workflow snapshots */
 function findTaskInSnapshots(
@@ -213,7 +215,14 @@ function useSidebarData(workspaceId: string | null) {
     archivedState,
   ]);
 
-  return { activeTaskId, selectedTaskId, allSteps, isLoadingWorkflow, tasksWithRepositories };
+  return {
+    activeTaskId,
+    selectedTaskId,
+    allSteps,
+    isLoadingWorkflow,
+    tasksWithRepositories,
+    snapshots,
+  };
 }
 
 type SwitchFn = (
@@ -367,8 +376,14 @@ export const TaskSessionSidebar = memo(function TaskSessionSidebar({
   const store = useAppStoreApi();
   useAllWorkflowSnapshots(workspaceId);
 
-  const { activeTaskId, selectedTaskId, allSteps, isLoadingWorkflow, tasksWithRepositories } =
-    useSidebarData(workspaceId);
+  const {
+    activeTaskId,
+    selectedTaskId,
+    allSteps,
+    isLoadingWorkflow,
+    tasksWithRepositories,
+    snapshots,
+  } = useSidebarData(workspaceId);
   const {
     deletingTaskId,
     preparingTaskId,
@@ -381,15 +396,32 @@ export const TaskSessionSidebar = memo(function TaskSessionSidebar({
     handleRenameSubmit,
   } = useSidebarActions(store);
 
-  const displayTasks = useMemo(
-    () =>
-      preparingTaskId
-        ? tasksWithRepositories.map((t) =>
-            t.id === preparingTaskId ? { ...t, sessionState: "STARTING" as TaskSessionState } : t,
-          )
-        : tasksWithRepositories,
-    [tasksWithRepositories, preparingTaskId],
-  );
+  const displayTasks = useMemo(() => {
+    const base = preparingTaskId
+      ? tasksWithRepositories.map((t) =>
+          t.id === preparingTaskId ? { ...t, sessionState: "STARTING" as TaskSessionState } : t,
+        )
+      : tasksWithRepositories;
+    // Inject demo sub-tasks for multi-repo tasks
+    const result: typeof base = [];
+    for (const task of base) {
+      result.push(task);
+      if (isMultiRepoTask(task.id, snapshots as Record<string, WorkflowSnapshotData>)) {
+        for (const sub of getMultiRepoSubTasks(["bff", "enrichment-service", "atom"])) {
+          result.push({
+            ...task,
+            id: sub.id,
+            title: `  \u21B3 ${sub.title}`,
+            description: `Sub-agent: ${sub.agent}`,
+            repositoryPath: sub.repo,
+            primarySessionId: null,
+            diffStats: undefined,
+          });
+        }
+      }
+    }
+    return result;
+  }, [tasksWithRepositories, preparingTaskId, snapshots]);
 
   return (
     <PanelRoot data-testid="task-sidebar">

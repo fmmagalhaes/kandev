@@ -57,6 +57,11 @@ const EXECUTOR_TYPES = [
     label: "Sprites.dev",
     description: "Run agents in Sprites.dev cloud sandboxes.",
   },
+  {
+    type: "remote_k8s",
+    label: "Core Platform",
+    description: "Schedule tasks on the internal Kubernetes cluster.",
+  },
 ] as const;
 
 function ExecutorIconBadge({ type }: { type: string }) {

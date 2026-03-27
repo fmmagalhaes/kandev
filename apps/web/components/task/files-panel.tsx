@@ -8,6 +8,46 @@ import { useDockviewStore } from "@/lib/state/dockview-store";
 import { FileBrowser } from "@/components/task/file-browser";
 import type { OpenFileTab } from "@/lib/types/backend";
 import { useIsTaskArchived, ArchivedPanelPlaceholder } from "./task-archived-context";
+import { getMultiRepoRepos } from "@/lib/demo/multi-repo-task";
+import { MultiRepoFileTree } from "@/components/demo/multi-repo-file-tree";
+import type { WorkflowSnapshotData } from "@/lib/state/slices/kanban/types";
+
+function FilesPanelContent({
+  multiRepoRepos,
+  activeSessionId,
+  onOpenFile,
+  onCreateFile,
+  onDeleteFile,
+  onRenameFile,
+  activeFilePath,
+}: {
+  multiRepoRepos: string[] | null;
+  activeSessionId: string | null;
+  onOpenFile: (file: OpenFileTab) => void;
+  onCreateFile: (path: string) => Promise<boolean>;
+  onDeleteFile: (path: string) => Promise<boolean>;
+  onRenameFile: (oldPath: string, newPath: string) => Promise<boolean>;
+  activeFilePath: string | null;
+}) {
+  if (multiRepoRepos) return <MultiRepoFileTree repos={multiRepoRepos} />;
+  if (activeSessionId) {
+    return (
+      <FileBrowser
+        sessionId={activeSessionId}
+        onOpenFile={onOpenFile}
+        onCreateFile={onCreateFile}
+        onDeleteFile={onDeleteFile}
+        onRenameFile={onRenameFile}
+        activeFilePath={activeFilePath}
+      />
+    );
+  }
+  return (
+    <div className="flex items-center justify-center h-full text-muted-foreground text-xs">
+      No task selected
+    </div>
+  );
+}
 
 type FilesPanelProps = {
   onOpenFile: (file: OpenFileTab) => void;
@@ -15,9 +55,15 @@ type FilesPanelProps = {
 
 const FilesPanel = memo(function FilesPanel({ onOpenFile }: FilesPanelProps) {
   const activeSessionId = useAppStore((state) => state.tasks.activeSessionId);
+  const activeTaskId = useAppStore((state) => state.tasks.activeTaskId);
   const activeFilePath = useDockviewStore((s) => s.activeFilePath);
   const isArchived = useIsTaskArchived();
   const { createFile, deleteFile, renameFile } = useFileOperations(activeSessionId ?? null);
+  const snapshots = useAppStore((s) => s.kanbanMulti.snapshots) as Record<
+    string,
+    WorkflowSnapshotData
+  >;
+  const multiRepoRepos = getMultiRepoRepos(activeTaskId, snapshots);
 
   const handleCreateFile = useCallback(
     async (path: string): Promise<boolean> => {
@@ -45,20 +91,15 @@ const FilesPanel = memo(function FilesPanel({ onOpenFile }: FilesPanelProps) {
   return (
     <PanelRoot data-testid="files-panel">
       <PanelBody padding={false}>
-        {activeSessionId ? (
-          <FileBrowser
-            sessionId={activeSessionId}
-            onOpenFile={onOpenFile}
-            onCreateFile={handleCreateFile}
-            onDeleteFile={deleteFile}
-            onRenameFile={renameFile}
-            activeFilePath={activeFilePath}
-          />
-        ) : (
-          <div className="flex items-center justify-center h-full text-muted-foreground text-xs">
-            No task selected
-          </div>
-        )}
+        <FilesPanelContent
+          multiRepoRepos={multiRepoRepos}
+          activeSessionId={activeSessionId}
+          onOpenFile={onOpenFile}
+          onCreateFile={handleCreateFile}
+          onDeleteFile={deleteFile}
+          onRenameFile={renameFile}
+          activeFilePath={activeFilePath}
+        />
       </PanelBody>
     </PanelRoot>
   );

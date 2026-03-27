@@ -37,6 +37,8 @@ import {
   type DialogFormState,
   type TaskCreateDialogInitialValues,
 } from "@/components/task-create-dialog-state";
+import { MultiRepoWizard } from "@/components/demo/multi-repo-wizard";
+import { MULTI_REPO_WORKFLOW_NAME } from "@/lib/demo/constants";
 
 interface TaskCreateDialogProps {
   open: boolean;
@@ -258,11 +260,46 @@ type DialogFormBodyProps = {
   onExecutorProfileChange: (v: string) => void;
   onWorkflowChange: (v: string) => void;
   hasRepositorySelection: boolean;
+  showMultiRepoWizard: boolean;
+  onCloseDialog: () => void;
+  taskName: string;
 };
 
-function DialogFormBody({
+function DialogFormBody(props: DialogFormBodyProps) {
+  const {
+    isCreateMode,
+    isTaskStarted,
+    workflows,
+    snapshots,
+    effectiveWorkflowId,
+    onWorkflowChange,
+  } = props;
+  const { showMultiRepoWizard, onCloseDialog } = props;
+  return (
+    <div className="flex-1 space-y-4 overflow-y-auto pr-1">
+      <WorkflowSection
+        isCreateMode={isCreateMode}
+        isTaskStarted={isTaskStarted}
+        workflows={workflows as Parameters<typeof WorkflowSection>[0]["workflows"]}
+        snapshots={snapshots as Parameters<typeof WorkflowSection>[0]["snapshots"]}
+        effectiveWorkflowId={effectiveWorkflowId}
+        onWorkflowChange={onWorkflowChange}
+      />
+      {showMultiRepoWizard ? (
+        <MultiRepoWizard
+          title={props.taskName}
+          onSubmit={() => onCloseDialog()}
+          onCancel={() => onCloseDialog()}
+        />
+      ) : (
+        <StandardFormFields {...props} />
+      )}
+    </div>
+  );
+}
+
+function StandardFormFields({
   isSessionMode,
-  isCreateMode,
   isTaskStarted,
   isPassthroughProfile,
   initialDescription,
@@ -275,23 +312,19 @@ function DialogFormBody({
   agentProfilesLoading,
   executorsLoading,
   isCreatingSession,
-  workflows,
-  snapshots,
-  effectiveWorkflowId,
   fs,
   handleKeyDown,
   onBranchChange,
   onAgentProfileChange,
   onExecutorProfileChange,
-  onWorkflowChange,
   hasRepositorySelection,
 }: DialogFormBodyProps) {
   return (
-    <div className="flex-1 space-y-4 overflow-y-auto pr-1">
+    <>
       <TaskFormInputs
         key={fs.openCycle}
         isSessionMode={isSessionMode}
-        autoFocus={isTaskStarted ? false : true}
+        autoFocus={!isTaskStarted}
         initialDescription={initialDescription}
         onDescriptionChange={fs.setHasDescription}
         onKeyDown={handleKeyDown}
@@ -331,14 +364,6 @@ function DialogFormBody({
           ExecutorProfileSelectorComponent={ExecutorProfileSelector}
         />
       )}
-      <WorkflowSection
-        isCreateMode={isCreateMode}
-        isTaskStarted={isTaskStarted}
-        workflows={workflows as Parameters<typeof WorkflowSection>[0]["workflows"]}
-        snapshots={snapshots as Parameters<typeof WorkflowSection>[0]["snapshots"]}
-        effectiveWorkflowId={effectiveWorkflowId}
-        onWorkflowChange={onWorkflowChange}
-      />
       {isSessionMode && (
         <SessionSelectors
           agentProfileOptions={agentProfileOptions}
@@ -354,7 +379,7 @@ function DialogFormBody({
           ExecutorProfileSelectorComponent={ExecutorProfileSelector}
         />
       )}
-    </div>
+    </>
   );
 }
 
@@ -451,21 +476,53 @@ function useTaskCreateDialogSetup(props: TaskCreateDialogProps) {
   };
 }
 
-export function TaskCreateDialog(props: TaskCreateDialogProps) {
-  const { open, onOpenChange, initialValues, workspaceId } = props;
-  const setup = useTaskCreateDialogSetup(props);
+function isMultiRepoWorkflow(
+  workflows: Array<{ id: string; name: string }>,
+  effectiveWorkflowId: string | null | undefined,
+): boolean {
+  if (!effectiveWorkflowId) return false;
+  const wf = workflows.find((w) => w.id === effectiveWorkflowId);
+  return wf?.name === MULTI_REPO_WORKFLOW_NAME;
+}
+
+function useMultiRepoState(setup: ReturnType<typeof useTaskCreateDialogSetup>) {
+  const { fs, isCreateMode, isTaskStarted, workflows, computed } = setup;
+  const wfList = workflows as Array<{ id: string; name: string }>;
+  const isInherited =
+    !fs.userChangedWorkflow && isMultiRepoWorkflow(wfList, computed.effectiveWorkflowId);
+  const showWizard =
+    isCreateMode &&
+    !isTaskStarted &&
+    fs.userChangedWorkflow &&
+    isMultiRepoWorkflow(wfList, computed.effectiveWorkflowId);
+  const displayedWorkflowId = isInherited ? null : computed.effectiveWorkflowId;
+  return { showWizard, displayedWorkflowId };
+}
+
+function StandardDialogContent({
+  setup,
+  props,
+}: {
+  setup: ReturnType<typeof useTaskCreateDialogSetup>;
+  props: TaskCreateDialogProps;
+}) {
+  const { initialValues, workspaceId, onOpenChange } = props;
   const { fs, isSessionMode, isEditMode, isCreateMode, isTaskStarted } = setup;
   const { sessionRepoName, workflows, agentProfiles, snapshots } = setup;
   const { repositoriesLoading, branchesLoading, computed, handlers, handleKeyDown } = setup;
-  const { handleSubmit, handleUpdateWithoutAgent, handleCreateWithoutAgent } = setup.submitHandlers;
-  const { handleCreateWithPlanMode, handleCancel } = setup.submitHandlers;
+  const {
+    handleSubmit,
+    handleUpdateWithoutAgent,
+    handleCreateWithoutAgent,
+    handleCreateWithPlanMode,
+    handleCancel,
+  } = setup.submitHandlers;
+  const { showWizard: showMultiRepoWizard, displayedWorkflowId } = useMultiRepoState(setup);
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        data-testid="create-task-dialog"
-        className="w-full h-full max-w-full max-h-full rounded-none sm:w-[900px] sm:h-auto sm:max-w-none sm:max-h-[85vh] sm:rounded-lg flex flex-col"
-      >
-        <DialogHeader>
+    <>
+      <DialogHeader>
+        {!showMultiRepoWizard && (
           <DialogHeaderContent
             isCreateMode={isCreateMode}
             isEditMode={isEditMode}
@@ -487,34 +544,52 @@ export function TaskCreateDialog(props: TaskCreateDialogProps) {
             onToggleGitHubUrl={handlers.handleToggleGitHubUrl}
             onGitHubUrlChange={handlers.handleGitHubUrlChange}
           />
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4 overflow-hidden">
-          <DialogFormBody
-            isSessionMode={isSessionMode}
-            isCreateMode={isCreateMode}
-            isTaskStarted={isTaskStarted}
-            isPassthroughProfile={computed.isPassthroughProfile}
-            initialDescription={fs.currentDefaults.description}
-            hasDescription={fs.hasDescription}
-            branchOptions={computed.branchOptions}
-            branchesLoading={branchesLoading || (fs.useGitHubUrl && fs.githubBranchesLoading)}
-            agentProfileOptions={computed.agentProfileOptions}
-            executorProfileOptions={computed.executorProfileOptions}
-            agentProfiles={agentProfiles}
-            agentProfilesLoading={computed.agentProfilesLoading}
-            executorsLoading={computed.executorsLoading}
-            isCreatingSession={fs.isCreatingSession}
-            workflows={workflows}
-            snapshots={snapshots}
-            effectiveWorkflowId={computed.effectiveWorkflowId ?? null}
-            fs={fs}
-            handleKeyDown={handleKeyDown}
-            onBranchChange={handlers.handleBranchChange}
-            onAgentProfileChange={handlers.handleAgentProfileChange}
-            onExecutorProfileChange={handlers.handleExecutorProfileChange}
-            onWorkflowChange={handlers.handleWorkflowChange}
-            hasRepositorySelection={computed.hasRepositorySelection}
-          />
+        )}
+        {showMultiRepoWizard && (
+          <DialogTitle asChild>
+            <div className="flex items-center gap-1 text-sm font-medium min-w-0">
+              <span className="text-muted-foreground shrink-0">Multi Repo</span>
+              <span className="text-muted-foreground mr-2">/</span>
+              <InlineTaskName
+                value={fs.taskName}
+                onChange={handlers.handleTaskNameChange}
+                autoFocus
+              />
+            </div>
+          </DialogTitle>
+        )}
+      </DialogHeader>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4 overflow-hidden">
+        <DialogFormBody
+          isSessionMode={isSessionMode}
+          isCreateMode={isCreateMode}
+          isTaskStarted={isTaskStarted}
+          isPassthroughProfile={computed.isPassthroughProfile}
+          initialDescription={fs.currentDefaults.description}
+          hasDescription={fs.hasDescription}
+          branchOptions={computed.branchOptions}
+          branchesLoading={branchesLoading || (fs.useGitHubUrl && fs.githubBranchesLoading)}
+          agentProfileOptions={computed.agentProfileOptions}
+          executorProfileOptions={computed.executorProfileOptions}
+          agentProfiles={agentProfiles}
+          agentProfilesLoading={computed.agentProfilesLoading}
+          executorsLoading={computed.executorsLoading}
+          isCreatingSession={fs.isCreatingSession}
+          workflows={workflows}
+          snapshots={snapshots}
+          effectiveWorkflowId={displayedWorkflowId ?? null}
+          fs={fs}
+          handleKeyDown={handleKeyDown}
+          onBranchChange={handlers.handleBranchChange}
+          onAgentProfileChange={handlers.handleAgentProfileChange}
+          onExecutorProfileChange={handlers.handleExecutorProfileChange}
+          onWorkflowChange={handlers.handleWorkflowChange}
+          hasRepositorySelection={computed.hasRepositorySelection}
+          showMultiRepoWizard={showMultiRepoWizard}
+          onCloseDialog={() => onOpenChange(false)}
+          taskName={fs.taskName}
+        />
+        {!showMultiRepoWizard && (
           <DialogFooter className="border-t border-border pt-3 flex-col gap-3 sm:flex-row sm:gap-2">
             <TaskCreateDialogFooter
               isSessionMode={isSessionMode}
@@ -538,7 +613,23 @@ export function TaskCreateDialog(props: TaskCreateDialogProps) {
               onCreateWithPlanMode={handleCreateWithPlanMode}
             />
           </DialogFooter>
-        </form>
+        )}
+      </form>
+    </>
+  );
+}
+
+export function TaskCreateDialog(props: TaskCreateDialogProps) {
+  const { open, onOpenChange } = props;
+  const setup = useTaskCreateDialogSetup(props);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        data-testid="create-task-dialog"
+        className="w-full h-full max-w-full max-h-full rounded-none sm:w-[900px] sm:h-auto sm:max-w-none sm:max-h-[85vh] sm:rounded-lg flex flex-col"
+      >
+        <StandardDialogContent setup={setup} props={props} />
       </DialogContent>
     </Dialog>
   );

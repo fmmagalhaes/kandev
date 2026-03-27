@@ -17,6 +17,9 @@ import { useKanbanData, useKanbanActions, useKanbanNavigation } from "@/hooks/do
 import { useAllWorkflowSnapshots } from "@/hooks/domains/kanban/use-all-workflow-snapshots";
 import { useResponsiveBreakpoint } from "@/hooks/use-responsive-breakpoint";
 import { HomepageCommands } from "./homepage-commands";
+import { IntegrationBanner } from "./demo/integration-banner";
+import { useDemoSeeder } from "@/lib/demo/use-demo-seeder";
+import type { TaskCreateDialogInitialValues } from "@/components/task-create-dialog-state";
 import { linkToSession } from "@/lib/links";
 import {
   AlertDialog,
@@ -266,6 +269,26 @@ function useKanbanBoardSetup(
 
 export function KanbanBoard({ onPreviewTask, onOpenTask }: KanbanBoardProps = {}) {
   const s = useKanbanBoardSetup(onPreviewTask, onOpenTask);
+  useDemoSeeder();
+  const [jiraInitialValues, setJiraInitialValues] = useState<
+    TaskCreateDialogInitialValues | undefined
+  >();
+
+  const handleCreateFromTicket = useCallback(
+    (values: TaskCreateDialogInitialValues) => {
+      setJiraInitialValues(values);
+      s.handleCreate();
+    },
+    [s],
+  );
+
+  const handleDialogOpenChange = useCallback(
+    (open: boolean) => {
+      if (!open) setJiraInitialValues(undefined);
+      s.handleDialogOpenChange(open);
+    },
+    [s],
+  );
 
   if (!s.isMounted) {
     return <div className="h-dvh w-full bg-background" />;
@@ -286,12 +309,13 @@ export function KanbanBoard({ onPreviewTask, onOpenTask }: KanbanBoardProps = {}
         searchQuery={s.searchQuery}
         onSearchChange={s.setSearchQuery}
       />
+      <IntegrationBanner onCreateTaskFromTicket={handleCreateFromTicket} />
       {s.isMobile && (
         <MobileSearchBar searchQuery={s.searchQuery} onSearchChange={s.setSearchQuery} />
       )}
       <KanbanBoardDialogs
         isDialogOpen={s.isDialogOpen}
-        handleDialogOpenChange={s.handleDialogOpenChange}
+        handleDialogOpenChange={handleDialogOpenChange}
         workspaceId={s.workspaceState.activeId}
         workflowId={s.kanban.workflowId}
         defaultStepId={s.activeSteps[0]?.id ?? null}
@@ -301,6 +325,7 @@ export function KanbanBoard({ onPreviewTask, onOpenTask }: KanbanBoardProps = {}
         moveError={s.moveError}
         setMoveError={s.setMoveError}
         handleGoToTask={s.handleGoToTask}
+        jiraInitialValues={jiraInitialValues}
       />
       <SwimlaneContainer
         viewMode={s.kanbanViewMode || ""}
@@ -355,6 +380,7 @@ type KanbanBoardDialogsProps = {
   moveError: MoveTaskError | null;
   setMoveError: (error: MoveTaskError | null) => void;
   handleGoToTask: () => void;
+  jiraInitialValues?: TaskCreateDialogInitialValues;
 };
 
 function KanbanBoardDialogs({
@@ -369,7 +395,17 @@ function KanbanBoardDialogs({
   moveError,
   setMoveError,
   handleGoToTask,
+  jiraInitialValues,
 }: KanbanBoardDialogsProps) {
+  const resolvedInitialValues = editingTask
+    ? {
+        title: editingTask.title,
+        description: editingTask.description,
+        state: editingTask.state as BackendTask["state"],
+        repositoryId: editingTask.repositoryId,
+      }
+    : jiraInitialValues;
+
   return (
     <>
       <TaskCreateDialog
@@ -392,16 +428,7 @@ function KanbanBoardDialogs({
             : null
         }
         onSuccess={handleDialogSuccess}
-        initialValues={
-          editingTask
-            ? {
-                title: editingTask.title,
-                description: editingTask.description,
-                state: editingTask.state as BackendTask["state"],
-                repositoryId: editingTask.repositoryId,
-              }
-            : undefined
-        }
+        initialValues={resolvedInitialValues}
         mode={editingTask ? "edit" : "create"}
       />
       <ApprovalWarningDialog

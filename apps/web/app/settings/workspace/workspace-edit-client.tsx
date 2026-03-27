@@ -25,6 +25,7 @@ import { useRequest } from "@/lib/http/use-request";
 import { useToast } from "@/components/toast-provider";
 import { useAppStore } from "@/components/state-provider";
 import { UnsavedChangesBadge, UnsavedSaveButton } from "@/components/settings/unsaved-indicator";
+import { WorkflowSyncCard } from "@/components/demo/workflow-sync-card";
 
 type WorkspaceEditClientProps = {
   workspaceId: string;
@@ -514,6 +515,10 @@ function WorkspaceEditForm({ workspace }: WorkspaceEditFormProps) {
         onSave={handleSave}
       />
       <WorkspaceLinksCard workspaceId={currentWorkspace.id} />
+      <WorkflowSyncCard
+        scopeKey={currentWorkspace.id}
+        description="Sync workflows from a GitHub repository so they are shared across the team in this workspace."
+      />
       <Separator />
       <DeleteWorkspaceCard
         deleteDialogOpen={deleteDialogOpen}

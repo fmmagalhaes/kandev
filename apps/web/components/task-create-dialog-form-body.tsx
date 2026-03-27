@@ -229,7 +229,7 @@ export const WorkflowSection = memo(function WorkflowSection({
   effectiveWorkflowId,
   onWorkflowChange,
 }: WorkflowSectionProps) {
-  if (!isCreateMode || workflows.length <= 1 || isTaskStarted) return null;
+  if (!isCreateMode || workflows.length === 0 || isTaskStarted) return null;
   return (
     <WorkflowSelectorRow
       workflows={workflows}

@@ -161,14 +161,27 @@ export function useExecutorOptions(executors: Executor[]): OptionItem[] {
   }, [executors]);
 }
 
-export function useExecutorHint(executors: Executor[], executorId: string): string | null {
+export function useExecutorHint(
+  executors: Executor[],
+  executorId: string,
+  executorProfileId?: string,
+): string | null {
   return useMemo(() => {
+    // Check if the selected profile is the "Core Platform" demo profile
+    if (executorProfileId) {
+      for (const e of executors) {
+        const profile = e.profiles?.find((p) => p.id === executorProfileId);
+        if (profile?.name === "Core Platform") {
+          return "The agent will run remotely on the K8s cluster.";
+        }
+      }
+    }
     const selectedExecutor = executors.find((e: Executor) => e.id === executorId);
     if (selectedExecutor?.type === "worktree")
       return "A git worktree will be created from the base branch.";
     if (selectedExecutor?.type === "local") return "The agent will run directly on the repository.";
     return null;
-  }, [executors, executorId]);
+  }, [executors, executorId, executorProfileId]);
 }
 
 export type ExecutorProfileOptionItem = OptionItem & {

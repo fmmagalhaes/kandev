@@ -21,6 +21,21 @@ export async function fetchWorkflowSnapshot(workflowId: string, options?: ApiReq
   return fetchJson<WorkflowSnapshot>(`/api/v1/workflows/${workflowId}/snapshot`, options);
 }
 
+export async function createWorkflow(
+  payload: {
+    workspace_id: string;
+    name: string;
+    description?: string;
+    workflow_template_id?: string;
+  },
+  options?: ApiRequestOptions,
+) {
+  return fetchJson<{ id: string; workspace_id: string; name: string }>("/api/v1/workflows", {
+    ...options,
+    init: { method: "POST", body: JSON.stringify(payload), ...(options?.init ?? {}) },
+  });
+}
+
 // Task operations
 export async function createTask(
   payload: {

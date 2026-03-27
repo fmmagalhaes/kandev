@@ -243,6 +243,12 @@ function DesktopHeader({
             Settings
           </Button>
         </Link>
+        <div className="flex items-center gap-2 pl-2 border-l border-border">
+          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-medium">
+            CF
+          </div>
+          <span className="text-sm text-muted-foreground">Carlos Florencio (GST)</span>
+        </div>
       </div>
     </header>
   );

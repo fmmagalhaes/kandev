@@ -55,6 +55,7 @@ type FormResetters = {
   setExecutorId: (v: string) => void;
   setExecutorProfileId: (v: string) => void;
   setSelectedWorkflowId: (v: string | null) => void;
+  setUserChangedWorkflow: (v: boolean) => void;
   setFetchedSteps: (v: StepType[] | null) => void;
   setDiscoveredRepositories: (v: LocalRepository[]) => void;
   setDiscoveredRepoPath: (v: string) => void;
@@ -156,6 +157,7 @@ function resetTaskForm(
   resetters.setExecutorId("");
   resetters.setExecutorProfileId("");
   resetters.setSelectedWorkflowId(workflowId);
+  resetters.setUserChangedWorkflow(false);
   resetters.setFetchedSteps(null);
 }
 
@@ -269,6 +271,7 @@ function useFormStateValues(
   const [executorId, setExecutorId] = useState("");
   const [executorProfileId, setExecutorProfileId] = useState("");
   const [selectedWorkflowId, setSelectedWorkflowId] = useState(workflowId);
+  const [userChangedWorkflow, setUserChangedWorkflow] = useState(false);
   const [fetchedSteps, setFetchedSteps] = useState<StepType[] | null>(null);
   const [isCreatingSession, setIsCreatingSession] = useState(false);
   const [isCreatingTask, setIsCreatingTask] = useState(false);
@@ -294,6 +297,8 @@ function useFormStateValues(
     setExecutorProfileId,
     selectedWorkflowId,
     setSelectedWorkflowId,
+    userChangedWorkflow,
+    setUserChangedWorkflow,
     fetchedSteps,
     setFetchedSteps,
     isCreatingSession,
@@ -364,6 +369,7 @@ export function useDialogFormState(
       setExecutorId: form.setExecutorId,
       setExecutorProfileId: form.setExecutorProfileId,
       setSelectedWorkflowId: form.setSelectedWorkflowId,
+      setUserChangedWorkflow: form.setUserChangedWorkflow,
       setFetchedSteps: form.setFetchedSteps,
       setDiscoveredRepositories: discovery.setDiscoveredRepositories,
       setDiscoveredRepoPath: discovery.setDiscoveredRepoPath,
@@ -397,8 +403,8 @@ export {
 } from "@/components/task-create-dialog-helpers";
 export { useTaskCreateDialogEffects } from "@/components/task-create-dialog-effects";
 
-export function useDialogHandlers(fs: DialogFormState, repositories: Repository[]) {
-  const handleSelectLocalRepository = useCallback(
+function useSelectLocalRepository(fs: DialogFormState) {
+  return useCallback(
     (path: string) => {
       fs.setDiscoveredRepoPath(path);
       fs.setSelectedLocalRepo(fs.discoveredRepositories.find((r) => r.path === path) ?? null);
@@ -408,6 +414,10 @@ export function useDialogHandlers(fs: DialogFormState, repositories: Repository[
     },
     [fs],
   );
+}
+
+export function useDialogHandlers(fs: DialogFormState, repositories: Repository[]) {
+  const handleSelectLocalRepository = useSelectLocalRepository(fs);
 
   const handleRepositoryChange = useCallback(
     (value: string) => {
@@ -459,6 +469,7 @@ export function useDialogHandlers(fs: DialogFormState, repositories: Repository[
   const handleWorkflowChange = useCallback(
     (value: string) => {
       fs.setSelectedWorkflowId(value);
+      fs.setUserChangedWorkflow(true);
     },
     [fs],
   );
@@ -550,7 +561,7 @@ export function useDialogComputed({
     );
   }, [executors]);
   const executorProfileOptions = useExecutorProfileOptions(allExecutorProfiles);
-  const executorHint = useExecutorHint(executors, fs.executorId);
+  const executorHint = useExecutorHint(executors, fs.executorId, fs.executorProfileId);
   const { headerRepositoryOptions } = useRepositoryOptions(repositories, fs.discoveredRepositories);
   const agentProfilesLoading = open && !settingsData.agentsLoaded;
   const executorsLoading = open && !settingsData.executorsLoaded;

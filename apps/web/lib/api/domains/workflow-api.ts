@@ -83,6 +83,7 @@ export async function createWorkflowStep(
     color?: string;
     prompt?: string;
     events?: StepEvents;
+    is_start_step?: boolean;
   },
   options?: ApiRequestOptions,
 ) {

@@ -14,6 +14,7 @@ import {
   IconMessageCircle,
   IconBrandGithub,
   IconSparkles,
+  IconBuilding,
 } from "@tabler/icons-react";
 import {
   Sidebar,
@@ -286,6 +287,41 @@ export function SettingsAppSidebar() {
               <SidebarMenu>
                 <GeneralSidebarSection pathname={pathname} />
                 <WorkspacesSidebarSection pathname={pathname} workspaces={workspaces} />
+
+                {/* Organization */}
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild tooltip="Organization">
+                    <Link href="/settings/organization/agents-report">
+                      <IconBuilding className="h-4 w-4" />
+                      <span>Organization</span>
+                    </Link>
+                  </SidebarMenuButton>
+                  <SidebarMenuSub className="ml-3 mt-1">
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton
+                        asChild
+                        size="sm"
+                        isActive={pathname === "/settings/organization/agents-report"}
+                      >
+                        <Link href="/settings/organization/agents-report">
+                          <span>Agents Report</span>
+                        </Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton
+                        asChild
+                        size="sm"
+                        isActive={pathname === "/settings/organization/admin"}
+                      >
+                        <Link href="/settings/organization/admin">
+                          <span>Admin</span>
+                        </Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                  </SidebarMenuSub>
+                </SidebarMenuItem>
+
                 <AgentsSidebarSection pathname={pathname} agents={agents} />
 
                 {/* Prompts */}

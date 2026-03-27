@@ -127,6 +127,8 @@ export type DialogFormState = {
   setDiscoverReposLoaded: (v: boolean) => void;
   selectedWorkflowId: string | null;
   setSelectedWorkflowId: (v: string | null) => void;
+  userChangedWorkflow: boolean;
+  setUserChangedWorkflow: (v: boolean) => void;
   fetchedSteps: StepType[] | null;
   setFetchedSteps: (v: StepType[] | null) => void;
   isCreatingSession: boolean;

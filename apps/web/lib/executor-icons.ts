@@ -4,6 +4,7 @@ import {
   IconBrandDocker,
   IconCloud,
   IconSparkles,
+  IconServer,
 } from "@tabler/icons-react";
 
 export const EXECUTOR_ICON_MAP: Record<string, typeof IconFolder> = {
@@ -12,6 +13,7 @@ export const EXECUTOR_ICON_MAP: Record<string, typeof IconFolder> = {
   local_docker: IconBrandDocker,
   remote_docker: IconCloud,
   sprites: IconSparkles,
+  remote_k8s: IconServer,
 };
 
 export function getExecutorIcon(type: string): typeof IconFolder {
@@ -24,6 +26,7 @@ const EXECUTOR_LABEL_MAP: Record<string, string> = {
   local_docker: "Local Docker",
   remote_docker: "Remote Docker",
   sprites: "Sprites.dev",
+  remote_k8s: "Core Platform",
 };
 
 export function getExecutorLabel(type: string): string {
