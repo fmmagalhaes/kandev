@@ -24,6 +24,8 @@ type GitHubService interface {
 	CreatePRWatch(ctx context.Context, sessionID, taskID, owner, repo string, prNumber int, branch string) (*github.PRWatch, error)
 	EnsurePRWatch(ctx context.Context, sessionID, taskID, owner, repo, branch string) (*github.PRWatch, error)
 	GetPRWatchBySession(ctx context.Context, sessionID string) (*github.PRWatch, error)
+	UpdatePRWatchBranch(ctx context.Context, id, branch string) error
+	UpdatePRWatchPRNumber(ctx context.Context, id string, prNumber int) error
 	AssociatePRWithTask(ctx context.Context, taskID string, pr *github.PR) (*github.TaskPR, error)
 	GetTaskPR(ctx context.Context, taskID string) (*github.TaskPR, error)
 	RecordReviewPRTask(ctx context.Context, watchID, repoOwner, repoName string, prNumber int, prURL, taskID string) error
@@ -279,10 +281,18 @@ func (s *Service) detectPushAndAssociatePR(
 		return
 	}
 
-	// Check if we already have a watch for this session
+	// Check if we already have a watch for this session.
+	// If the watch already has a PR number, the PR was found — nothing to do.
+	// If the watch has pr_number=0, it's still searching — do an immediate
+	// search (faster than waiting for the 1-minute poller) and update the
+	// watch branch if the agent pushed from a different branch.
 	existing, err := s.githubService.GetPRWatchBySession(ctx, sessionID)
 	if err == nil && existing != nil {
-		return // already watching
+		if existing.PRNumber > 0 {
+			return // PR already found and being monitored
+		}
+		s.searchPRForExistingWatch(ctx, client, existing, sessionID, taskID, branch)
+		return
 	}
 
 	owner, repoName := s.resolveSessionRepo(ctx, sessionID)
@@ -314,6 +324,47 @@ func (s *Service) detectPushAndAssociatePR(
 		}
 		s.associatePRFromPush(ctx, sessionID, taskID, owner, repoName, branch, foundPR)
 		return
+	}
+}
+
+// searchPRForExistingWatch handles the case where a PR watch exists with pr_number=0
+// (still searching). It updates the watch branch if the agent pushed from a different
+// branch, then does a single immediate search so we don't wait for the 1-minute poller.
+func (s *Service) searchPRForExistingWatch(
+	ctx context.Context, client github.Client, watch *github.PRWatch,
+	sessionID, taskID, branch string,
+) {
+	// Update branch if the agent switched branches since the watch was created.
+	if watch.Branch != branch {
+		if err := s.githubService.UpdatePRWatchBranch(ctx, watch.ID, branch); err != nil {
+			s.logger.Warn("failed to update PR watch branch",
+				zap.String("watch_id", watch.ID),
+				zap.String("old_branch", watch.Branch),
+				zap.String("new_branch", branch),
+				zap.Error(err))
+		}
+	}
+	// Immediate search — if found, update the existing watch and associate.
+	// We must not call associatePRFromPush here because it calls CreatePRWatch,
+	// which would fail with a UNIQUE constraint since the watch already exists.
+	foundPR, findErr := client.FindPRByBranch(ctx, watch.Owner, watch.Repo, branch)
+	if findErr == nil && foundPR != nil {
+		if err := s.githubService.UpdatePRWatchPRNumber(ctx, watch.ID, foundPR.Number); err != nil {
+			s.logger.Warn("failed to update PR watch number",
+				zap.String("watch_id", watch.ID),
+				zap.Int("pr_number", foundPR.Number),
+				zap.Error(err))
+		}
+		if _, err := s.githubService.AssociatePRWithTask(ctx, taskID, foundPR); err != nil {
+			s.logger.Error("failed to associate PR with task",
+				zap.String("task_id", taskID),
+				zap.Int("pr_number", foundPR.Number),
+				zap.Error(err))
+		}
+		s.logger.Info("auto-detected PR from push (existing watch)",
+			zap.String("session_id", sessionID),
+			zap.Int("pr_number", foundPR.Number),
+			zap.String("branch", branch))
 	}
 }
 
