@@ -119,6 +119,8 @@ export type UserSettingsState = {
   defaultUtilityAgentId: string | null;
   keyboardShortcuts: Record<string, { key: string; modifiers?: Record<string, boolean> }>;
   terminalLinkBehavior: "new_tab" | "browser_panel";
+  terminalFontFamily: string | null;
+  terminalFontSize: number | null;
   loaded: boolean;
 };
 

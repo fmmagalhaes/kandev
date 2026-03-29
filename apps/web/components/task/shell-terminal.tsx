@@ -11,6 +11,7 @@ import { useSession } from "@/hooks/domains/session/use-session";
 import { useSessionAgentctl } from "@/hooks/domains/session/use-session-agentctl";
 import { getTerminalTheme } from "@/lib/theme/terminal-theme";
 import { useTerminalLinkHandler } from "@/hooks/use-terminal-link-handler";
+import { buildTerminalFontFamily } from "@/lib/terminal/terminal-font";
 import { exposeBufferReader } from "./terminal-buffer-reader";
 
 type ShellTerminalProps = {
@@ -28,13 +29,25 @@ type TerminalRefs = {
   outputRef: React.RefObject<string>;
 };
 
-function useTerminalInit(
-  refs: TerminalRefs,
-  isReadOnlyMode: boolean,
-  taskId: string | null,
-  sessionId: string | null | undefined,
-  linkHandler?: (event: MouseEvent, uri: string) => void,
-) {
+type ShellTerminalInitOptions = {
+  refs: TerminalRefs;
+  isReadOnlyMode: boolean;
+  taskId: string | null;
+  sessionId: string | null | undefined;
+  linkHandler?: (event: MouseEvent, uri: string) => void;
+  fontFamily?: string;
+  fontSize?: number;
+};
+
+function useTerminalInit({
+  refs,
+  isReadOnlyMode,
+  taskId,
+  sessionId,
+  linkHandler,
+  fontFamily,
+  fontSize,
+}: ShellTerminalInitOptions) {
   const { terminalRef, xtermRef, fitAddonRef, lastOutputLengthRef, outputRef } = refs;
 
   useEffect(() => {
@@ -43,8 +56,8 @@ function useTerminalInit(
       cursorBlink: !isReadOnlyMode,
       disableStdin: isReadOnlyMode,
       convertEol: isReadOnlyMode,
-      fontSize: isReadOnlyMode ? 12 : 13,
-      fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+      fontSize: fontSize ?? (isReadOnlyMode ? 12 : 13),
+      fontFamily: fontFamily || 'Menlo, Monaco, "Courier New", monospace',
       macOptionIsMeta: true,
       theme: getTerminalTheme(terminalRef.current),
     });
@@ -98,6 +111,8 @@ function useTerminalInit(
     sessionId,
     isReadOnlyMode,
     linkHandler,
+    fontFamily,
+    fontSize,
     terminalRef,
     xtermRef,
     fitAddonRef,
@@ -279,6 +294,50 @@ function useCmdArrowHandler(
   }, [xtermRef, sessionId, send, isReadOnlyMode, stateRef]);
 }
 
+/** Handles user input in interactive mode, filtering out cursor position responses. */
+function useShellInputHandler(opts: {
+  xtermRef: React.RefObject<Terminal | null>;
+  onDataDisposableRef: React.MutableRefObject<{ dispose: () => void } | null>;
+  isReadOnlyMode: boolean;
+  taskId: string | null;
+  sessionId: string | null | undefined;
+  send: (action: string, payload: Record<string, unknown>) => void;
+}) {
+  const { xtermRef, onDataDisposableRef, isReadOnlyMode, taskId, sessionId, send } = opts;
+  useEffect(() => {
+    if (!xtermRef.current || isReadOnlyMode) return;
+    onDataDisposableRef.current?.dispose();
+    onDataDisposableRef.current = null;
+    if (!taskId || !sessionId) return;
+    onDataDisposableRef.current = xtermRef.current.onData((data) => {
+      if (/^\x1b\[\d+;\d+R$/.test(data) || /^\x1b\[\d+R$/.test(data)) return;
+      send("shell.input", { session_id: sessionId, data });
+    });
+    return () => {
+      onDataDisposableRef.current?.dispose();
+      onDataDisposableRef.current = null;
+    };
+  }, [taskId, sessionId, send, isReadOnlyMode, xtermRef, onDataDisposableRef]);
+}
+
+function useShellSessionState(propSessionId: string | undefined, isReadOnlyMode: boolean) {
+  const storeSessionId = useAppStore((state) => state.tasks.activeSessionId);
+  const sessionId = propSessionId ?? storeSessionId;
+  const { session, isActive, isFailed, errorMessage } = useSession(
+    isReadOnlyMode ? null : sessionId,
+  );
+  useSessionAgentctl(isReadOnlyMode ? null : sessionId);
+  const taskId = session?.task_id ?? null;
+  const isSessionFailed = !isReadOnlyMode && isFailed;
+  const shellOutput = useAppStore((state) => {
+    if (!sessionId || isReadOnlyMode) return "";
+    const envKey = state.environmentIdBySessionId[sessionId] ?? sessionId;
+    return state.shell.outputs[envKey] || "";
+  });
+  const canSubscribe = Boolean(sessionId && isActive && !isReadOnlyMode);
+  return { sessionId, taskId, isSessionFailed, errorMessage, shellOutput, canSubscribe };
+}
+
 export function ShellTerminal({
   sessionId: propSessionId,
   processOutput,
@@ -295,21 +354,8 @@ export function ShellTerminal({
   const storeApi = useAppStoreApi();
 
   const isReadOnlyMode = processOutput !== undefined;
-  const storeSessionId = useAppStore((state) => state.tasks.activeSessionId);
-  const sessionId = propSessionId ?? storeSessionId;
-
-  const { session, isActive, isFailed, errorMessage } = useSession(
-    isReadOnlyMode ? null : sessionId,
-  );
-  useSessionAgentctl(isReadOnlyMode ? null : sessionId);
-  const taskId = session?.task_id ?? null;
-  const isSessionFailed = !isReadOnlyMode && isFailed;
-  const shellOutput = useAppStore((state) => {
-    if (!sessionId || isReadOnlyMode) return "";
-    const envKey = state.environmentIdBySessionId[sessionId] ?? sessionId;
-    return state.shell.outputs[envKey] || "";
-  });
-  const canSubscribe = Boolean(sessionId && isActive && !isReadOnlyMode);
+  const { sessionId, taskId, isSessionFailed, errorMessage, shellOutput, canSubscribe } =
+    useShellSessionState(propSessionId, isReadOnlyMode);
   useReadOnlyOutputSync({
     xtermRef,
     isReadOnlyMode,
@@ -326,25 +372,20 @@ export function ShellTerminal({
   }, []);
 
   const linkHandler = useTerminalLinkHandler();
+  const terminalFontFamily = useAppStore((s) => s.userSettings.terminalFontFamily);
+  const terminalFontSize = useAppStore((s) => s.userSettings.terminalFontSize);
   const refs: TerminalRefs = { terminalRef, xtermRef, fitAddonRef, lastOutputLengthRef, outputRef };
-  useTerminalInit(refs, isReadOnlyMode, taskId, sessionId, linkHandler);
+  useTerminalInit({
+    refs,
+    isReadOnlyMode,
+    taskId,
+    sessionId,
+    linkHandler,
+    fontFamily: buildTerminalFontFamily(terminalFontFamily),
+    fontSize: terminalFontSize ?? undefined,
+  });
 
-  // Handle user input (interactive mode only)
-  useEffect(() => {
-    if (!xtermRef.current || isReadOnlyMode) return;
-    onDataDisposableRef.current?.dispose();
-    onDataDisposableRef.current = null;
-    if (!taskId || !sessionId) return;
-    onDataDisposableRef.current = xtermRef.current.onData((data) => {
-      if (/^\x1b\[\d+;\d+R$/.test(data) || /^\x1b\[\d+R$/.test(data)) return;
-      send("shell.input", { session_id: sessionId, data });
-    });
-    return () => {
-      onDataDisposableRef.current?.dispose();
-      onDataDisposableRef.current = null;
-    };
-  }, [taskId, sessionId, send, isReadOnlyMode]);
-
+  useShellInputHandler({ xtermRef, onDataDisposableRef, isReadOnlyMode, taskId, sessionId, send });
   useCmdArrowHandler(xtermRef, isReadOnlyMode, sessionId, send);
   useTerminalOutputWrite(xtermRef, isReadOnlyMode, processOutput, shellOutput, lastOutputLengthRef);
 
@@ -360,7 +401,7 @@ export function ShellTerminal({
   if (isReadOnlyMode) {
     return (
       <div className="h-full w-full bg-transparent relative">
-        <div className="p-1 absolute inset-0">
+        <div className="p-1 pb-2 absolute inset-0">
           <div ref={terminalRef} className="h-full w-full" />
         </div>
         {isStopping && (
@@ -378,7 +419,7 @@ export function ShellTerminal({
     );
   }
   return (
-    <div className="h-full p-1 w-full overflow-hidden bg-transparent">
+    <div className="h-full p-1 pb-2 w-full overflow-hidden bg-transparent">
       <div ref={terminalRef} className="h-full w-full" />
     </div>
   );

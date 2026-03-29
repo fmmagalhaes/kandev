@@ -49,6 +49,8 @@ type UpdateUserSettingsRequest struct {
 	DefaultUtilityModel         *string
 	KeyboardShortcuts           *map[string]interface{}
 	TerminalLinkBehavior        *string
+	TerminalFontFamily          *string
+	TerminalFontSize            *int
 }
 
 func NewService(repo store.Repository, eventBus bus.EventBus, log *logger.Logger) *Service {
@@ -168,6 +170,16 @@ func applyBasicSettings(settings *models.UserSettings, req *UpdateUserSettingsRe
 	if err := applyTerminalLinkBehavior(settings, req.TerminalLinkBehavior); err != nil {
 		return err
 	}
+	if req.TerminalFontFamily != nil {
+		settings.TerminalFontFamily = strings.TrimSpace(*req.TerminalFontFamily)
+	}
+	if req.TerminalFontSize != nil {
+		v := *req.TerminalFontSize
+		if v != 0 && (v < 8 || v > 24) {
+			return errors.New("terminal_font_size must be 0 (default) or between 8 and 24")
+		}
+		settings.TerminalFontSize = v
+	}
 	return nil
 }
 
@@ -263,6 +275,8 @@ func (s *Service) publishUserSettingsEvent(ctx context.Context, settings *models
 		"default_utility_model":           settings.DefaultUtilityModel,
 		"keyboard_shortcuts":              settings.KeyboardShortcuts,
 		"terminal_link_behavior":          settings.TerminalLinkBehavior,
+		"terminal_font_family":            settings.TerminalFontFamily,
+		"terminal_font_size":              settings.TerminalFontSize,
 		"updated_at":                      settings.UpdatedAt.Format(time.RFC3339),
 	}
 	if err := s.eventBus.Publish(ctx, events.UserSettingsUpdated, bus.NewEvent(events.UserSettingsUpdated, "user-service", data)); err != nil {

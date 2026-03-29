@@ -39,6 +39,8 @@ export const defaultSettingsState: SettingsSliceState = {
     savedLayouts: [],
     defaultUtilityAgentId: null,
     keyboardShortcuts: {},
+    terminalFontFamily: null,
+    terminalFontSize: null,
     loaded: false,
   },
 };

@@ -64,6 +64,8 @@ func (c *Controller) UpdateUserSettings(ctx context.Context, req dto.UpdateUserS
 		DefaultUtilityModel:         req.DefaultUtilityModel,
 		KeyboardShortcuts:           req.KeyboardShortcuts,
 		TerminalLinkBehavior:        req.TerminalLinkBehavior,
+		TerminalFontFamily:          req.TerminalFontFamily,
+		TerminalFontSize:            req.TerminalFontSize,
 	})
 	if err != nil {
 		return dto.UserSettingsResponse{}, err

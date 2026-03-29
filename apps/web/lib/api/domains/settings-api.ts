@@ -47,6 +47,8 @@ export async function updateUserSettings(
     default_utility_model?: string;
     keyboard_shortcuts?: Record<string, { key: string; modifiers?: Record<string, boolean> }>;
     terminal_link_behavior?: "new_tab" | "browser_panel";
+    terminal_font_family?: string;
+    terminal_font_size?: number;
   },
   options?: ApiRequestOptions,
 ) {

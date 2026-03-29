@@ -6,6 +6,14 @@ export function parseTerminalLinkBehavior(value: string | undefined): "new_tab" 
   return value === "browser_panel" ? "browser_panel" : "new_tab";
 }
 
+function buildTerminalFields(s: UserSettingsData) {
+  return {
+    terminalLinkBehavior: parseTerminalLinkBehavior(s.terminal_link_behavior),
+    terminalFontFamily: s.terminal_font_family || null,
+    terminalFontSize: s.terminal_font_size || null,
+  };
+}
+
 export function buildCoreFields(s: UserSettingsData) {
   return {
     workspaceId: s.workspace_id || null,
@@ -22,7 +30,7 @@ export function buildCoreFields(s: UserSettingsData) {
     savedLayouts: s.saved_layouts ?? [],
     defaultUtilityAgentId: s.default_utility_agent_id || null,
     keyboardShortcuts: s.keyboard_shortcuts ?? {},
-    terminalLinkBehavior: parseTerminalLinkBehavior(s.terminal_link_behavior),
+    ...buildTerminalFields(s),
   };
 }
 
@@ -59,6 +67,8 @@ export function mapUserSettingsResponse(response: UserSettingsResponse | null) {
       defaultUtilityAgentId: null,
       keyboardShortcuts: {} as Record<string, { key: string; modifiers?: Record<string, boolean> }>,
       terminalLinkBehavior: "new_tab" as const,
+      terminalFontFamily: null,
+      terminalFontSize: null,
       ...buildLspFields(undefined),
       loaded: false,
     };

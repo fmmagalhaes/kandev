@@ -240,6 +240,8 @@ function buildUserSettingsFromResponse(
     defaultUtilityAgentId: s.default_utility_agent_id || null,
     keyboardShortcuts: s.keyboard_shortcuts ?? {},
     terminalLinkBehavior: parseTerminalLinkBehavior(s.terminal_link_behavior),
+    terminalFontFamily: s.terminal_font_family || null,
+    terminalFontSize: s.terminal_font_size || null,
     ...mapEditorSettingsFields(s),
   };
 }
