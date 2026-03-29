@@ -2,6 +2,32 @@
 
 All notable changes to Kandev.
 
+## 0.25 - 2026-03-29
+
+### Features
+
+- add Feature Dev workflow and improve default workflow prompts ([#481](https://github.com/kdlbs/kandev/pull/481))
+- add file-based knowledge system with decision log and plan storage ([#479](https://github.com/kdlbs/kandev/pull/479))
+- add commit body field and AI generation for commit description and PR title ([#465](https://github.com/kdlbs/kandev/pull/465))
+
+### Bug Fixes
+
+- update gemini ACP flag and claude-agent-acp package org ([#482](https://github.com/kdlbs/kandev/pull/482))
+- fail session with guidance when PR branch is missing ([#466](https://github.com/kdlbs/kandev/pull/466))
+- recover workspace operations after backend restart ([#475](https://github.com/kdlbs/kandev/pull/475))
+- prevent pointer-events: none from getting stuck on body after dialog navigation ([#474](https://github.com/kdlbs/kandev/pull/474))
+- resolve stale execution ID after backend restart ([#473](https://github.com/kdlbs/kandev/pull/473))
+- stop workspace tracker when work directory is deleted ([#472](https://github.com/kdlbs/kandev/pull/472))
+- prevent dockview layout from not filling viewport after session switch ([#471](https://github.com/kdlbs/kandev/pull/471))
+- add queued message indicator to quick chat and e2e tests ([#470](https://github.com/kdlbs/kandev/pull/470))
+- wrap long lines in markdown chat messages ([#469](https://github.com/kdlbs/kandev/pull/469))
+- resolve symlinks in file tree so symlink-to-directory entries show as folders ([#467](https://github.com/kdlbs/kandev/pull/467))
+
+### Refactoring
+
+- rename /investigate skill to /fix ([#483](https://github.com/kdlbs/kandev/pull/483))
+- centralize default prompts and fix PR review scoping ([#476](https://github.com/kdlbs/kandev/pull/476))
+
 ## 0.24 - 2026-03-25
 
 ### Features
