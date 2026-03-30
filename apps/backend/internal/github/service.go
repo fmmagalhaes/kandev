@@ -213,37 +213,33 @@ func (s *Service) UpdatePRWatchPRNumber(ctx context.Context, id string, prNumber
 	return s.store.UpdatePRWatchPRNumber(ctx, id, prNumber)
 }
 
-// CheckPRWatch fetches latest feedback for a PR watch and determines if there are changes.
-func (s *Service) CheckPRWatch(ctx context.Context, watch *PRWatch) (*PRFeedback, bool, error) {
+// CheckPRWatch fetches lightweight PR status for a watch and determines if there are changes.
+func (s *Service) CheckPRWatch(ctx context.Context, watch *PRWatch) (*PRStatus, bool, error) {
 	if s.client == nil {
 		return nil, false, fmt.Errorf("github client not available")
 	}
-	feedback, err := s.client.GetPRFeedback(ctx, watch.Owner, watch.Repo, watch.PRNumber)
+	status, err := s.client.GetPRStatus(ctx, watch.Owner, watch.Repo, watch.PRNumber)
 	if err != nil {
 		return nil, false, err
 	}
 
 	hasNew := false
 
-	// Check for new comments
-	latestCommentAt := findLatestCommentTime(feedback.Comments)
-	if latestCommentAt != nil && (watch.LastCommentAt == nil || latestCommentAt.After(*watch.LastCommentAt)) {
+	// Check for check status or review state changes
+	if status.ChecksState != watch.LastCheckStatus {
 		hasNew = true
 	}
-
-	// Check for check status changes
-	checkStatus := computeOverallCheckStatus(feedback.Checks)
-	if checkStatus != watch.LastCheckStatus {
+	if status.ReviewState != watch.LastReviewState {
 		hasNew = true
 	}
 
 	// Update watch timestamps
 	now := time.Now().UTC()
-	if err := s.store.UpdatePRWatchTimestamps(ctx, watch.ID, now, latestCommentAt, checkStatus); err != nil {
+	if err := s.store.UpdatePRWatchTimestamps(ctx, watch.ID, now, nil, status.ChecksState, status.ReviewState); err != nil {
 		s.logger.Error("failed to update PR watch timestamps", zap.String("id", watch.ID), zap.Error(err))
 	}
 
-	return feedback, hasNew, nil
+	return status, hasNew, nil
 }
 
 // EnsurePRWatch creates a PRWatch with pr_number=0 for a session if one doesn't already exist.
@@ -403,25 +399,27 @@ func (s *Service) ListTaskPRs(ctx context.Context, taskIDs []string) (map[string
 	return s.store.ListTaskPRsByTaskIDs(ctx, taskIDs)
 }
 
-// SyncTaskPR updates a TaskPR record with the latest PR data from feedback.
-func (s *Service) SyncTaskPR(ctx context.Context, taskID string, feedback *PRFeedback) error {
+// SyncTaskPR updates a TaskPR record with the latest PR status.
+func (s *Service) SyncTaskPR(ctx context.Context, taskID string, status *PRStatus) error {
+	if status == nil || status.PR == nil {
+		return fmt.Errorf("sync task PR: missing PR data for task %s", taskID)
+	}
 	tp, err := s.store.GetTaskPR(ctx, taskID)
 	if err != nil || tp == nil {
 		return err
 	}
 
-	tp.State = feedback.PR.State
-	tp.PRTitle = feedback.PR.Title
-	tp.Additions = feedback.PR.Additions
-	tp.Deletions = feedback.PR.Deletions
-	tp.MergedAt = feedback.PR.MergedAt
-	tp.ClosedAt = feedback.PR.ClosedAt
-	tp.CommentCount = len(feedback.Comments)
-	tp.ReviewCount = len(feedback.Reviews)
-	reviewState, pendingReviewCount := deriveReviewSyncState(feedback.PR, feedback.Reviews)
-	tp.ReviewState = reviewState
-	tp.ChecksState = computeOverallCheckStatus(feedback.Checks)
-	tp.PendingReviewCount = pendingReviewCount
+	tp.State = status.PR.State
+	tp.PRTitle = status.PR.Title
+	tp.Additions = status.PR.Additions
+	tp.Deletions = status.PR.Deletions
+	tp.MergedAt = status.PR.MergedAt
+	tp.ClosedAt = status.PR.ClosedAt
+	tp.ReviewState = status.ReviewState
+	tp.ChecksState = status.ChecksState
+	tp.ReviewCount = status.ReviewCount
+	tp.PendingReviewCount = status.PendingReviewCount
+	// CommentCount is no longer updated from polling -- only refreshed on-demand
 	now := time.Now().UTC()
 	tp.LastSyncedAt = &now
 
@@ -454,6 +452,64 @@ func (s *Service) GetPRFeedback(ctx context.Context, owner, repo string, number 
 		return nil, fmt.Errorf("github client not available")
 	}
 	return s.client.GetPRFeedback(ctx, owner, repo, number)
+}
+
+// TriggerPRSync performs an immediate PR status sync for a task.
+// If the watch has a PR number, it fetches the latest status from GitHub
+// and syncs it to the TaskPR record. If still searching (pr_number=0),
+// it attempts to find the PR by branch.
+func (s *Service) TriggerPRSync(ctx context.Context, taskID string) (*TaskPR, error) {
+	watch, err := s.store.GetPRWatchByTask(ctx, taskID)
+	if err != nil {
+		return nil, fmt.Errorf("get PR watch: %w", err)
+	}
+	if watch == nil {
+		// No watch — just return existing TaskPR if any
+		return s.store.GetTaskPR(ctx, taskID)
+	}
+
+	if watch.PRNumber == 0 {
+		return s.triggerPRDetection(ctx, watch, taskID)
+	}
+
+	return s.triggerPRStatusSync(ctx, watch, taskID)
+}
+
+func (s *Service) triggerPRDetection(ctx context.Context, watch *PRWatch, taskID string) (*TaskPR, error) {
+	if s.client == nil {
+		return nil, nil
+	}
+	pr, err := s.client.FindPRByBranch(ctx, watch.Owner, watch.Repo, watch.Branch)
+	if err != nil || pr == nil {
+		return nil, err
+	}
+	if err := s.store.UpdatePRWatchPRNumber(ctx, watch.ID, pr.Number); err != nil {
+		s.logger.Error("failed to update PR watch number during sync",
+			zap.String("watch_id", watch.ID), zap.Int("pr_number", pr.Number), zap.Error(err))
+		return nil, fmt.Errorf("update PR watch: %w", err)
+	}
+	if _, assocErr := s.AssociatePRWithTask(ctx, taskID, pr); assocErr != nil {
+		s.logger.Error("failed to associate PR with task during sync",
+			zap.String("task_id", taskID), zap.Int("pr_number", pr.Number), zap.Error(assocErr))
+		return nil, fmt.Errorf("associate PR: %w", assocErr)
+	}
+	// Also fetch status so the first response includes review/check state
+	watch.PRNumber = pr.Number
+	return s.triggerPRStatusSync(ctx, watch, taskID)
+}
+
+func (s *Service) triggerPRStatusSync(ctx context.Context, watch *PRWatch, taskID string) (*TaskPR, error) {
+	status, _, err := s.CheckPRWatch(ctx, watch)
+	if err != nil {
+		return nil, err
+	}
+	if status == nil {
+		return s.store.GetTaskPR(ctx, taskID)
+	}
+	if syncErr := s.SyncTaskPR(ctx, taskID, status); syncErr != nil {
+		return nil, syncErr
+	}
+	return s.store.GetTaskPR(ctx, taskID)
 }
 
 // --- PR files and commits (live) ---

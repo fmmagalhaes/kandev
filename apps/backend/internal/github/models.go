@@ -82,6 +82,16 @@ type PRFeedback struct {
 	HasIssues bool        `json:"has_issues"`
 }
 
+// PRStatus contains lightweight PR state used by the background poller.
+// Unlike PRFeedback, it skips comments to reduce API calls.
+type PRStatus struct {
+	PR                 *PR    `json:"pr"`
+	ReviewState        string `json:"review_state"` // "approved", "changes_requested", "pending", ""
+	ChecksState        string `json:"checks_state"` // "success", "failure", "pending", ""
+	ReviewCount        int    `json:"review_count"`
+	PendingReviewCount int    `json:"pending_review_count"`
+}
+
 // PRWatch tracks active PR monitoring (session → PR).
 type PRWatch struct {
 	ID              string     `json:"id" db:"id"`
@@ -94,6 +104,7 @@ type PRWatch struct {
 	LastCheckedAt   *time.Time `json:"last_checked_at,omitempty" db:"last_checked_at"`
 	LastCommentAt   *time.Time `json:"last_comment_at,omitempty" db:"last_comment_at"`
 	LastCheckStatus string     `json:"last_check_status" db:"last_check_status"`
+	LastReviewState string     `json:"last_review_state" db:"last_review_state"`
 	CreatedAt       time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt       time.Time  `json:"updated_at" db:"updated_at"`
 }
@@ -243,8 +254,6 @@ type PRFeedbackEvent struct {
 	PRNumber       int    `json:"pr_number"`
 	Owner          string `json:"owner"`
 	Repo           string `json:"repo"`
-	NewComments    int    `json:"new_comments"`
-	ChecksChanged  bool   `json:"checks_changed"`
 	NewCheckStatus string `json:"new_check_status"`
 	NewReviewState string `json:"new_review_state"`
 }

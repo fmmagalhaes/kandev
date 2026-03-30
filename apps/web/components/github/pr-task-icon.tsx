@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { useAppStore } from "@/components/state-provider";
 import type { TaskPR } from "@/lib/types/github";
 
-function getPRStatusColor(pr: TaskPR): string {
+export function getPRStatusColor(pr: TaskPR): string {
   if (pr.state === "merged") return "text-purple-500";
   if (pr.state === "closed") return "text-red-500";
   if (pr.review_state === "changes_requested" || pr.checks_state === "failure") {
@@ -37,7 +37,11 @@ export function PRTaskIcon({ taskId }: { taskId: string }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span className={cn("inline-flex items-center", getPRStatusColor(pr))}>
+        <span
+          data-testid={`pr-task-icon-${taskId}`}
+          data-pr-state={pr.state}
+          className={cn("inline-flex items-center", getPRStatusColor(pr))}
+        >
           <IconGitPullRequest className="h-3.5 w-3.5" />
         </span>
       </TooltipTrigger>

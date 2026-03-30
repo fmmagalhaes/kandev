@@ -28,6 +28,7 @@ type GitHubService interface {
 	UpdatePRWatchPRNumber(ctx context.Context, id string, prNumber int) error
 	AssociatePRWithTask(ctx context.Context, taskID string, pr *github.PR) (*github.TaskPR, error)
 	GetTaskPR(ctx context.Context, taskID string) (*github.TaskPR, error)
+	ListActivePRWatches(ctx context.Context) ([]*github.PRWatch, error)
 	RecordReviewPRTask(ctx context.Context, watchID, repoOwner, repoName string, prNumber int, prURL, taskID string) error
 }
 
@@ -555,6 +556,71 @@ func (s *Service) CheckSessionPR(ctx context.Context, taskID, sessionID string) 
 	// Found a PR — associate it with the task
 	s.associatePRFromPush(ctx, sessionID, taskID, owner, repoName, branch, pr)
 	return true, nil
+}
+
+// ListTasksNeedingPRWatch returns task-session pairs that have worktree branches
+// but no existing PR watch. This satisfies the github.TaskBranchProvider interface.
+func (s *Service) ListTasksNeedingPRWatch(ctx context.Context) ([]github.TaskBranchInfo, error) {
+	if s.githubService == nil {
+		return nil, nil
+	}
+	store, ok := s.repo.(repoStore)
+	if !ok {
+		return nil, nil
+	}
+	return s.buildTaskBranchList(ctx, store)
+}
+
+// buildTaskBranchList queries sessions with branches, filters out those with
+// existing PR watches, and resolves GitHub owner/repo for the remainder.
+func (s *Service) buildTaskBranchList(ctx context.Context, store repoStore) ([]github.TaskBranchInfo, error) {
+	sessions, err := store.ListSessionsWithBranches(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list sessions with branches: %w", err)
+	}
+	if len(sessions) == 0 {
+		return nil, nil
+	}
+
+	// Batch fetch existing watches to avoid N+1 queries.
+	watchedSessions := s.buildWatchedSessionSet(ctx)
+
+	var result []github.TaskBranchInfo
+	for _, sess := range sessions {
+		if watchedSessions[sess.SessionID] {
+			continue
+		}
+		owner, repo := s.resolveTaskRepo(ctx, sess.TaskID)
+		if owner == "" || repo == "" {
+			continue
+		}
+		branch := s.resolvePRWatchBranch(ctx, sess.TaskID, sess.SessionID, sess.Branch)
+		if branch == "" {
+			continue
+		}
+		result = append(result, github.TaskBranchInfo{
+			TaskID:    sess.TaskID,
+			SessionID: sess.SessionID,
+			Owner:     owner,
+			Repo:      repo,
+			Branch:    branch,
+		})
+	}
+	return result, nil
+}
+
+// buildWatchedSessionSet returns a set of session IDs that already have PR watches.
+func (s *Service) buildWatchedSessionSet(ctx context.Context) map[string]bool {
+	watches, err := s.githubService.ListActivePRWatches(ctx)
+	if err != nil {
+		s.logger.Debug("failed to list PR watches for reconciliation", zap.Error(err))
+		return nil
+	}
+	set := make(map[string]bool, len(watches))
+	for _, w := range watches {
+		set[w.SessionID] = true
+	}
+	return set
 }
 
 // subscribeGitHubEvents subscribes to GitHub-related events on the event bus.
