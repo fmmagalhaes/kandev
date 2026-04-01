@@ -2,6 +2,22 @@
 
 All notable changes to Kandev.
 
+## 0.27 - 2026-04-01
+
+### Features
+
+- add pipeline enforcement and E2E handling to pr-fixup skill ([#522](https://github.com/kdlbs/kandev/pull/522))
+- add dev-first workflow and playwright-cli debugging to e2e skill ([#512](https://github.com/kdlbs/kandev/pull/512))
+- sort tasks by creation date in kanban and sidebar ([#511](https://github.com/kdlbs/kandev/pull/511))
+- improve skills with pipeline enforcement and skill delegation ([#510](https://github.com/kdlbs/kandev/pull/510))
+- rename sidebar sections to "Turn Finished" and "Running" ([#506](https://github.com/kdlbs/kandev/pull/506))
+
+### Bug Fixes
+
+- workspace-scoped PR data loading with cache and singleflight ([#509](https://github.com/kdlbs/kandev/pull/509))
+- re-inject plan mode instructions on follow-up prompts ([#507](https://github.com/kdlbs/kandev/pull/507))
+- preserve task status when resuming agent after backend restart ([#508](https://github.com/kdlbs/kandev/pull/508))
+
 ## 0.26 - 2026-03-31
 
 ### Features
