@@ -406,6 +406,28 @@ export function removeSessionMaximizeState(sessionId: string): void {
   }
 }
 
+// PR panel "offered" flag — tracks whether the auto-show PR panel was offered
+// for a session. If offered and then closed by the user, we respect the dismissal.
+const PR_PANEL_OFFERED_PREFIX = "kandev.pr-panel-offered.";
+
+export function wasPRPanelOffered(sessionId: string): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.sessionStorage.getItem(`${PR_PANEL_OFFERED_PREFIX}${sessionId}`) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function markPRPanelOffered(sessionId: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(`${PR_PANEL_OFFERED_PREFIX}${sessionId}`, "1");
+  } catch {
+    // Ignore write failures
+  }
+}
+
 // Internal storage keys for open file tabs
 const OPEN_FILES_KEY = "kandev.openFiles";
 const ACTIVE_TAB_KEY = "kandev.activeTab";
@@ -596,6 +618,7 @@ export function cleanupTaskStorage(taskId: string, sessionIds: string[]): void {
   // Session-keyed storage — clean all sessions belonging to the task
   for (const sessionId of sessionIds) {
     removeSessionMaximizeState(sessionId);
+    removeSessionStorage(`${PR_PANEL_OFFERED_PREFIX}${sessionId}`);
     removeSessionStorage(`${CHAT_DRAFT_TEXT_KEY}.${sessionId}`);
     removeSessionStorage(`${CHAT_DRAFT_CONTENT_KEY}.${sessionId}`);
     removeSessionStorage(`${CHAT_DRAFT_ATTACHMENTS_KEY}.${sessionId}`);
