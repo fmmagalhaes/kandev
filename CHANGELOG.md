@@ -2,6 +2,46 @@
 
 All notable changes to Kandev.
 
+## 0.28 - 2026-04-06
+
+### Features
+
+- right-click context menu to move sidebar tasks between steps ([#492](https://github.com/kdlbs/kandev/pull/492))
+- prioritize local changes above PR files in changes panel ([#528](https://github.com/kdlbs/kandev/pull/528))
+- auto-show PR details panel when task has associated PR ([#517](https://github.com/kdlbs/kandev/pull/517))
+- add workflow sorting with drag-and-drop reordering ([#520](https://github.com/kdlbs/kandev/pull/520))
+- expose hidden keybindings in settings for user customization ([#521](https://github.com/kdlbs/kandev/pull/521))
+- enable pprof memory profiling in dev/debug mode ([#518](https://github.com/kdlbs/kandev/pull/518))
+- disable branch selector for local executor and implement base branch checkout ([#515](https://github.com/kdlbs/kandev/pull/515))
+
+### Bug Fixes
+
+- compare ahead/behind counts against base branch instead of remote tracking branch ([#544](https://github.com/kdlbs/kandev/pull/544))
+- open embedded VS Code in center group instead of right sidebar ([#545](https://github.com/kdlbs/kandev/pull/545))
+- add paragraph spacing to markdown body for visible line breaks ([#540](https://github.com/kdlbs/kandev/pull/540))
+- skip git polling when workspace has no valid git repository ([#541](https://github.com/kdlbs/kandev/pull/541))
+- always set upstream tracking on git push and fix task worktree startPoint ([#536](https://github.com/kdlbs/kandev/pull/536))
+- suppress stale events during session resume history replay ([#527](https://github.com/kdlbs/kandev/pull/527))
+- associate PR with task when creating task from PR URL ([#539](https://github.com/kdlbs/kandev/pull/539))
+- prevent duplicate task.state_changed events and N+1 git show calls ([#534](https://github.com/kdlbs/kandev/pull/534))
+- disable plan mode when moving to next workflow step ([#525](https://github.com/kdlbs/kandev/pull/525))
+- stabilize git operation callbacks to fix staging first-click bug ([#535](https://github.com/kdlbs/kandev/pull/535))
+- show Push button when task has open PR and unpushed commits ([#537](https://github.com/kdlbs/kandev/pull/537))
+- guard against missing referencePanel in dockview focusOrAddPanel ([#538](https://github.com/kdlbs/kandev/pull/538))
+- stop runtime instance in CleanupStaleExecutionBySessionID to prevent leaked git polling ([#531](https://github.com/kdlbs/kandev/pull/531))
+- remove prompt timeout and prevent auto-resume of errored sessions ([#530](https://github.com/kdlbs/kandev/pull/530))
+- increment CI checks elapsed time for in-progress runs in PR panel ([#529](https://github.com/kdlbs/kandev/pull/529))
+- enforce headless mode for E2E tests in agent skills ([#526](https://github.com/kdlbs/kandev/pull/526))
+- clear stale activeSessionId when switching tasks ([#523](https://github.com/kdlbs/kandev/pull/523))
+- add max-height and scrollbar to queue message editor textarea ([#519](https://github.com/kdlbs/kandev/pull/519))
+- hide start agent button during preparation and fix auto-start race condition on step move ([#516](https://github.com/kdlbs/kandev/pull/516))
+- stop workspace tracker after consecutive git failures ([#514](https://github.com/kdlbs/kandev/pull/514))
+- stabilize diff viewer fileRefs to prevent auto-scroll on background updates ([#513](https://github.com/kdlbs/kandev/pull/513))
+
+### Performance
+
+- optimize git clone/fetch for large repos with many tags ([#533](https://github.com/kdlbs/kandev/pull/533))
+
 ## 0.27 - 2026-04-01
 
 ### Features
