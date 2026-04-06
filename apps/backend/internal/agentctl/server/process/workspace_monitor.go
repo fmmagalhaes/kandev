@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/kandev/kandev/internal/agentctl/types"
@@ -65,49 +66,61 @@ func (wt *WorkspaceTracker) monitorLoop(ctx context.Context) {
 		case <-wt.stopCh:
 			return
 		case <-ticker.C:
-			// Quick state check using mtime + diff-files
-			currentState, err := wt.getWorkspaceState(ctx)
-			if err != nil {
-				// Check if the work directory has been deleted (e.g., worktree removed
-				// after task was archived or PR branch was deleted). If so, stop the
-				// tracker to avoid spamming warnings every poll cycle.
-				if !wt.workDirExists() {
-					wt.logger.Warn("work directory no longer exists, stopping workspace tracker",
-						zap.String("workDir", wt.workDir))
-					return
-				}
-
-				// Git command failed for another reason - skip this cycle and retry on next tick.
-				// Don't update lastState so the change will be detected when git recovers.
-				consecutiveFailures++
-				if consecutiveFailures >= maxConsecutiveGitFailures {
-					wt.logger.Error("git commands failing repeatedly, stopping workspace monitor",
-						zap.String("workDir", wt.workDir),
-						zap.Int("consecutiveFailures", consecutiveFailures),
-						zap.Error(err))
-					return
-				}
-				wt.logger.Warn("failed to get workspace state, will retry next cycle",
-					zap.String("workDir", wt.workDir),
-					zap.Int("consecutiveFailures", consecutiveFailures),
-					zap.Error(err))
+			// Skip this tick if the previous cycle is still running (prevents process pile-up
+			// when git commands take longer than the poll interval on large repos).
+			if !atomic.CompareAndSwapInt32(&wt.monitorRunning, 0, 1) {
 				continue
 			}
-			consecutiveFailures = 0
-			if currentState.changed(lastState) {
-				lastState = currentState
-				wt.logger.Debug("workspace state changed, updating")
 
-				// Update git status (includes diff data) and file list, then notify subscribers
-				wt.updateGitStatus(ctx)
-				wt.updateFiles(ctx)
-				wt.notifyWorkspaceStreamFileChange(types.FileChangeNotification{
-					Timestamp: time.Now(),
-					Operation: types.FileOpRefresh,
-				})
+			stop := wt.monitorTick(ctx, &lastState, &consecutiveFailures)
+			if stop {
+				return
 			}
 		}
 	}
+}
+
+// monitorTick runs a single monitor cycle: checks workspace state and triggers
+// updates if changes are detected. Returns true if the loop should stop.
+// The deferred flag reset ensures monitorRunning is cleared even on panic.
+func (wt *WorkspaceTracker) monitorTick(ctx context.Context, lastState *workspaceState, consecutiveFailures *int) bool {
+	defer atomic.StoreInt32(&wt.monitorRunning, 0)
+
+	currentState, err := wt.getWorkspaceState(ctx)
+	if err != nil {
+		if !wt.workDirExists() {
+			wt.logger.Warn("work directory no longer exists, stopping workspace tracker",
+				zap.String("workDir", wt.workDir))
+			return true
+		}
+
+		*consecutiveFailures++
+		if *consecutiveFailures >= maxConsecutiveGitFailures {
+			wt.logger.Error("git commands failing repeatedly, stopping workspace monitor",
+				zap.String("workDir", wt.workDir),
+				zap.Int("consecutiveFailures", *consecutiveFailures),
+				zap.Error(err))
+			return true
+		}
+		wt.logger.Warn("failed to get workspace state, will retry next cycle",
+			zap.String("workDir", wt.workDir),
+			zap.Int("consecutiveFailures", *consecutiveFailures),
+			zap.Error(err))
+		return false
+	}
+	*consecutiveFailures = 0
+	if currentState.changed(*lastState) {
+		*lastState = currentState
+		wt.logger.Debug("workspace state changed, updating")
+
+		wt.tryUpdateGitStatus(ctx)
+		wt.updateFiles(ctx)
+		wt.notifyWorkspaceStreamFileChange(types.FileChangeNotification{
+			Timestamp: time.Now(),
+			Operation: types.FileOpRefresh,
+		})
+	}
+	return false
 }
 
 // workspaceState holds quick-check state for detecting workspace changes.
