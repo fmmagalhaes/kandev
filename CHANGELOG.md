@@ -2,6 +2,17 @@
 
 All notable changes to Kandev.
 
+## 0.30 - 2026-04-08
+
+### Bug Fixes
+
+- sort nested file tree folders before files ([#562](https://github.com/kdlbs/kandev/pull/562))
+- surface backend startup errors and extend health timeout ([#561](https://github.com/kdlbs/kandev/pull/561))
+- reduce log noise from expected error states ([#560](https://github.com/kdlbs/kandev/pull/560))
+- scroll dropdown selectors inside dialogs ([#559](https://github.com/kdlbs/kandev/pull/559))
+- prevent task reorder during silent session resume ([#555](https://github.com/kdlbs/kandev/pull/555))
+- persist live git status snapshot for sidebar diff badges ([#556](https://github.com/kdlbs/kandev/pull/556))
+
 ## 0.29 - 2026-04-07
 
 ### Features
