@@ -137,8 +137,8 @@ By default, the CLI automatically finds available ports:
 |---------|--------------|----------|
 | Backend | 8080 | Auto-selects from 10000-60000 |
 | Web | 37429 | Auto-selects from 10000-60000 |
-| AgentCtl | 8081 | Auto-selects from 10000-60000 |
-| MCP Server | 8082 | Auto-selects from 10000-60000 |
+| AgentCtl | 9999 | Auto-selects from 10000-60000 |
+| MCP Server | 9090 | Auto-selects from 10000-60000 |
 
 If the default port is in use, the CLI finds the next available port automatically.
 
