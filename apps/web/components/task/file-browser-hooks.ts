@@ -277,6 +277,36 @@ function useTreeLoader(ctx: TreeLoaderContext) {
   return loadTree;
 }
 
+function useFileChangeSubscription({
+  sessionIdRef,
+  expandedPaths,
+  setTree,
+  setLoadState,
+}: {
+  sessionIdRef: React.MutableRefObject<string>;
+  expandedPaths: Set<string>;
+  setTree: React.Dispatch<React.SetStateAction<FileTreeNode | null>>;
+  setLoadState: React.Dispatch<React.SetStateAction<LoadState>>;
+}) {
+  useEffect(() => {
+    const client = getWebSocketClient();
+    if (!client) return;
+    return client.on("session.workspace.file.changes", (msg) => {
+      const changes = msg.payload?.changes;
+      if (!changes || changes.length === 0) return;
+      applyFileChanges({
+        client,
+        sessionId: sessionIdRef.current,
+        expandedPaths,
+        changes,
+        setTree,
+        setLoadState,
+      });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expandedPaths]);
+}
+
 /**
  * Hook for tree loading with retry logic, file-change subscription, and expanded state.
  * @param sessionId - Session ID for API calls (agentctl routing).
@@ -317,11 +347,18 @@ export function useFileBrowserTree(sessionId: string, resetKey?: string) {
     setLoadError,
   });
 
-  // Full reset: clear tree + loading state. Only fires when the environment changes.
+  // Refs for effects below to read without adding deps — avoids infinite
+  // retry loops and wipe-on-reconnect when `isReady`/`loadState`/`tree` tick.
+  const agentctlIsReadyRef = useRef(agentctlStatus.isReady);
+  const loadStateRef = useRef(loadState);
+  const treeRef = useRef(tree);
+  agentctlIsReadyRef.current = agentctlStatus.isReady;
+  loadStateRef.current = loadState;
+  treeRef.current = tree;
   useEffect(() => {
     setTree(null);
     setIsLoadingTree(true);
-    setLoadState("loading");
+    setLoadState(agentctlIsReadyRef.current ? "loading" : "waiting");
     setLoadError(null);
     retryAttemptRef.current = 0;
     clearRetryTimer();
@@ -329,16 +366,26 @@ export function useFileBrowserTree(sessionId: string, resetKey?: string) {
     const savedPaths = getFilesPanelExpandedPaths(effectiveResetKey);
     setExpandedPaths(savedPaths.length > 0 ? new Set(savedPaths) : new Set());
     if (savedPaths.length > 0) hasInitializedExpandedRef.current = effectiveResetKey;
-    void loadTree({ resetRetry: true });
+    // Only load now if agentctl is ready; otherwise the sibling effect fires
+    // on the ready flip. Prevents burning the retry budget during slow prepare.
+    if (agentctlIsReadyRef.current) void loadTree({ resetRetry: true });
+    else setIsLoadingTree(false);
     return () => {
       clearRetryTimer();
     };
   }, [clearRetryTimer, loadTree, effectiveResetKey]);
 
+  // Fire the initial load on the waiting → ready transition. `loadState` is
+  // read via a ref so a failed load (which sets state back to "waiting") does
+  // not re-fire this effect and cancel the retry timer via `resetRetry: true`.
+  // "loaded" only counts when a tree is actually present — `applyFileChanges`
+  // can flip state to "loaded" while the tree is still null.
   useEffect(() => {
-    if (!agentctlStatus.isReady || loadState === "loaded") return;
+    if (!agentctlStatus.isReady) return;
+    if (loadStateRef.current === "loading") return;
+    if (loadStateRef.current === "loaded" && treeRef.current) return;
     void loadTree({ resetRetry: true });
-  }, [agentctlStatus.isReady, loadState, loadTree]);
+  }, [agentctlStatus.isReady, loadTree]);
 
   useEffect(() => {
     if (!tree || isLoadingTree || hasInitializedExpandedRef.current === effectiveResetKey) return;
@@ -353,22 +400,7 @@ export function useFileBrowserTree(sessionId: string, resetKey?: string) {
     }
   }, [expandedPaths, effectiveResetKey]);
 
-  useEffect(() => {
-    const client = getWebSocketClient();
-    if (!client) return;
-    return client.on("session.workspace.file.changes", (msg) => {
-      const changes = msg.payload?.changes;
-      if (!changes || changes.length === 0) return;
-      applyFileChanges({
-        client,
-        sessionId: sessionIdRef.current,
-        expandedPaths,
-        changes,
-        setTree,
-        setLoadState,
-      });
-    });
-  }, [expandedPaths]);
+  useFileChangeSubscription({ sessionIdRef, expandedPaths, setTree, setLoadState });
 
   const collapseAll = useCallback(() => {
     setExpandedPaths(new Set());
