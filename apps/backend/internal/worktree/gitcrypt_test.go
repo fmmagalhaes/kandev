@@ -429,7 +429,6 @@ func TestUnlockGitCryptAndCheckout_ManualWorktree(t *testing.T) {
 	}
 }
 
-
 func TestCreateWorktree_GitCryptLockedRepo(t *testing.T) {
 	skipIfNoGitCrypt(t)
 
@@ -496,12 +495,12 @@ func TestCreateWorktree_GitCryptLockedRepo(t *testing.T) {
 		t.Error("secret.txt should be encrypted in worktree of locked repo")
 	}
 
-	// Now unlock git-crypt in the worktree — this should work because
-	// no broken filters are configured.
+	// Verify that unlock-after-create works: the user can provide keys mid-session
+	// and git-crypt unlock should succeed, overwriting our smudge=cat setting.
 	unlockCmd := exec.Command("git-crypt", "unlock", keyFile)
 	unlockCmd.Dir = wt.Path
 	if out, unlockErr := unlockCmd.CombinedOutput(); unlockErr != nil {
-		t.Fatalf("git-crypt unlock in worktree should work, got: %v\n%s", unlockErr, out)
+		t.Fatalf("git-crypt unlock in worktree should work: %v\n%s", unlockErr, out)
 	}
 
 	// After unlock, secret.txt should be decrypted.
