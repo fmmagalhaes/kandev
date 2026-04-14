@@ -78,7 +78,7 @@ export const defaultSessionRuntimeState: SessionRuntimeSliceState = {
   },
   gitStatus: { byEnvironmentId: {} },
   environmentIdBySessionId: {},
-  sessionCommits: { bySessionId: {}, loading: {} },
+  sessionCommits: { byEnvironmentId: {}, loading: {} },
   contextWindow: { bySessionId: {} },
   agents: { agents: [] },
   availableCommands: { bySessionId: {} },
@@ -185,6 +185,35 @@ function buildUserShellActions(set: ImmerSet) {
   };
 }
 
+/**
+ * Migrate any env-keyed data stored under the fallback `sessionId` key to the
+ * proper `environmentId` key so selectors don't see stale data after the
+ * session→environment mapping is registered.
+ */
+function migrateEnvKeyedData(
+  draft: SessionRuntimeSliceState,
+  sessionId: string,
+  environmentId: string,
+) {
+  if (sessionId === environmentId) return;
+  const migrate = <T>(store: Record<string, T>) => {
+    if (sessionId in store) {
+      if (!(environmentId in store)) {
+        store[environmentId] = store[sessionId];
+      }
+      delete store[sessionId];
+    }
+  };
+  migrate(draft.sessionCommits.byEnvironmentId);
+  migrate(draft.sessionCommits.loading);
+  migrate(draft.gitStatus.byEnvironmentId);
+  migrate(draft.shell.outputs);
+  migrate(draft.shell.statuses);
+  migrate(draft.userShells.byEnvironmentId);
+  migrate(draft.userShells.loading);
+  migrate(draft.userShells.loaded);
+}
+
 export const createSessionRuntimeSlice: StateCreator<
   SessionRuntimeSlice,
   [["zustand/immer", never]],
@@ -208,6 +237,7 @@ export const createSessionRuntimeSlice: StateCreator<
   registerSessionEnvironment: (sessionId, environmentId) =>
     set((draft) => {
       draft.environmentIdBySessionId[sessionId] = environmentId;
+      migrateEnvKeyedData(draft, sessionId, environmentId);
     }),
   setContextWindow: (sessionId, contextWindow) =>
     set((draft) => {
@@ -215,28 +245,32 @@ export const createSessionRuntimeSlice: StateCreator<
     }),
   setSessionCommits: (sessionId, commits) =>
     set((draft) => {
-      draft.sessionCommits.bySessionId[sessionId] = commits;
+      const envKey = draft.environmentIdBySessionId[sessionId] ?? sessionId;
+      draft.sessionCommits.byEnvironmentId[envKey] = commits;
     }),
   setSessionCommitsLoading: (sessionId, loading) =>
     set((draft) => {
-      draft.sessionCommits.loading[sessionId] = loading;
+      const envKey = draft.environmentIdBySessionId[sessionId] ?? sessionId;
+      draft.sessionCommits.loading[envKey] = loading;
     }),
   addSessionCommit: (sessionId, commit) =>
     set((draft) => {
-      const existing = draft.sessionCommits.bySessionId[sessionId] || [];
+      const envKey = draft.environmentIdBySessionId[sessionId] ?? sessionId;
+      const existing = draft.sessionCommits.byEnvironmentId[envKey] || [];
       // For amend: only replace HEAD (first entry) if it has the same parent
       if (existing.length > 0 && existing[0].parent_sha === commit.parent_sha) {
         // Replace HEAD commit (this is an amend)
         existing[0] = commit;
-        draft.sessionCommits.bySessionId[sessionId] = existing;
+        draft.sessionCommits.byEnvironmentId[envKey] = existing;
       } else {
         // Normal commit: prepend to list
-        draft.sessionCommits.bySessionId[sessionId] = [commit, ...existing];
+        draft.sessionCommits.byEnvironmentId[envKey] = [commit, ...existing];
       }
     }),
   clearSessionCommits: (sessionId) =>
     set((draft) => {
-      delete draft.sessionCommits.bySessionId[sessionId];
+      const envKey = draft.environmentIdBySessionId[sessionId] ?? sessionId;
+      delete draft.sessionCommits.byEnvironmentId[envKey];
     }),
   setAvailableCommands: (sessionId, commands) =>
     set((draft) => {
