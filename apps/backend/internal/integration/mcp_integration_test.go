@@ -198,3 +198,88 @@ func TestMCPCreateTask_InvalidParentID_ReturnsError(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, ws.MessageTypeError, resp.Type)
 }
+
+func TestMCPCreateTask_StartAgentFalse_DoesNotRequireDescription(t *testing.T) {
+	ts, parentTaskID, _, _, _ := setupMCPTestServer(t)
+	defer ts.Close()
+
+	client := NewWSClient(t, ts.Server.URL)
+	defer client.Close()
+
+	// With start_agent=false, description should NOT be required for subtasks
+	resp, err := client.SendRequest("subtask-1", ws.ActionMCPCreateTask, map[string]interface{}{
+		"parent_id":   parentTaskID,
+		"title":       "Subtask without description",
+		"start_agent": false, // Don't auto-start, so no description needed
+	})
+	require.NoError(t, err)
+
+	// Should succeed because start_agent=false means no agent needs the description
+	assert.Equal(t, ws.MessageTypeResponse, resp.Type, "start_agent=false should allow subtask without description")
+}
+
+func TestMCPCreateTask_StartAgentTrue_RequiresDescription(t *testing.T) {
+	ts, parentTaskID, _, _, _ := setupMCPTestServer(t)
+	defer ts.Close()
+
+	client := NewWSClient(t, ts.Server.URL)
+	defer client.Close()
+
+	// With start_agent=true (default), description IS required for subtasks
+	resp, err := client.SendRequest("subtask-1", ws.ActionMCPCreateTask, map[string]interface{}{
+		"parent_id": parentTaskID,
+		"title":     "Subtask without description",
+		// start_agent defaults to true, description is required
+	})
+	require.NoError(t, err)
+
+	// Should fail because the sub-agent needs the description as initial prompt
+	assert.Equal(t, ws.MessageTypeError, resp.Type, "start_agent=true should require description for subtask")
+}
+
+func TestMCPCreateTask_SourceTaskID_TopLevel_Succeeds(t *testing.T) {
+	ts, parentTaskID, workspaceID, workflowID, _ := setupMCPTestServer(t)
+	defer ts.Close()
+
+	client := NewWSClient(t, ts.Server.URL)
+	defer client.Close()
+
+	// source_task_id is set by agentctl to the current task; verify the path succeeds
+	// and the task is created (even though parentTaskID has no repositories).
+	resp, err := client.SendRequest("top-source", ws.ActionMCPCreateTask, map[string]interface{}{
+		"workspace_id":   workspaceID,
+		"workflow_id":    workflowID,
+		"title":          "Top Level with Source Task",
+		"source_task_id": parentTaskID,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, ws.MessageTypeResponse, resp.Type, "valid source_task_id should not cause failure")
+
+	var payload map[string]interface{}
+	require.NoError(t, resp.ParsePayload(&payload))
+	assert.NotEmpty(t, payload["id"])
+}
+
+func TestMCPCreateTask_SourceTaskID_NotFound_StillCreatesTask(t *testing.T) {
+	ts, _, workspaceID, workflowID, _ := setupMCPTestServer(t)
+	defer ts.Close()
+
+	client := NewWSClient(t, ts.Server.URL)
+	defer client.Close()
+
+	// Non-existent source_task_id must silently fall through (Warn log only),
+	// not cause a validation error. This covers the error-swallow branch at
+	// resolveTaskRepositories:422.
+	resp, err := client.SendRequest("top-notfound", ws.ActionMCPCreateTask, map[string]interface{}{
+		"workspace_id":   workspaceID,
+		"workflow_id":    workflowID,
+		"title":          "Top Level with Missing Source Task",
+		"source_task_id": "nonexistent-task-id-xyz",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, ws.MessageTypeResponse, resp.Type, "missing source_task_id should silently succeed, not fail")
+
+	var payload map[string]interface{}
+	require.NoError(t, resp.ParsePayload(&payload))
+	assert.NotEmpty(t, payload["id"])
+}
