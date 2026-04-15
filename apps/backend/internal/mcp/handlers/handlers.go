@@ -293,6 +293,7 @@ func (h *Handlers) handleCreateTask(ctx context.Context, msg *ws.Message) (*ws.M
 	// Use local struct with JSON tags since dto.CreateTaskRequest lacks them
 	var req struct {
 		ParentID          string `json:"parent_id"`
+		SourceTaskID      string `json:"source_task_id"`
 		WorkspaceID       string `json:"workspace_id"`
 		WorkflowID        string `json:"workflow_id"`
 		WorkflowStepID    string `json:"workflow_step_id"`
@@ -336,6 +337,24 @@ func (h *Handlers) handleCreateTask(ctx context.Context, msg *ws.Message) (*ws.M
 		}
 	}
 
+	// For top-level tasks, inherit repositories from the calling agent's current task
+	// so the new task is associated with the same codebase.
+	if req.ParentID == "" && req.SourceTaskID != "" {
+		sourceTask, err := h.taskSvc.GetTask(ctx, req.SourceTaskID)
+		if err != nil {
+			h.logger.Warn("source task not found, skipping repo inheritance",
+				zap.String("source_task_id", req.SourceTaskID), zap.Error(err))
+		} else {
+			for _, r := range sourceTask.Repositories {
+				inheritedRepos = append(inheritedRepos, service.TaskRepositoryInput{
+					RepositoryID:   r.RepositoryID,
+					BaseBranch:     r.BaseBranch,
+					CheckoutBranch: r.CheckoutBranch,
+				})
+			}
+		}
+	}
+
 	if req.WorkspaceID == "" {
 		return ws.NewError(msg.ID, msg.Action, ws.ErrorCodeValidation, "workspace_id is required", nil)
 	}
@@ -366,18 +385,23 @@ func (h *Handlers) handleCreateTask(ctx context.Context, msg *ws.Message) (*ws.M
 // autoStartTask launches an agent session for a newly created task in the background.
 // It resolves the agent profile: explicit > parent's session > workspace default.
 // It resolves the executor: explicit executor_profile_id > parent's executor_profile_id >
-// parent's executor_id (fallback for sessions that have no profile).
+// parent's executor_id > "exec-worktree" (default for MCP-created tasks).
 func (h *Handlers) autoStartTask(task *models.Task, agentProfileID, executorProfileID string) {
 	if h.sessionLauncher == nil {
 		return
 	}
 
 	executorID := h.inheritFromParentSession(task.ParentID, &agentProfileID, &executorProfileID)
+
+	// Fall back to workspace defaults for agent profile and worktree executor
 	if agentProfileID == "" {
 		workspace, err := h.taskSvc.GetWorkspace(context.Background(), task.WorkspaceID)
 		if err == nil && workspace.DefaultAgentProfileID != nil {
 			agentProfileID = *workspace.DefaultAgentProfileID
 		}
+	}
+	if executorID == "" && executorProfileID == "" {
+		executorID = models.ExecutorIDWorktree
 	}
 
 	if agentProfileID == "" {
