@@ -26,6 +26,7 @@ import { requestFileContent, updateFileContent } from "@/lib/ws/workspace-files"
 import { generateUnifiedDiff, calculateHash } from "@/lib/utils/file-diff";
 import { useGlobalViewMode } from "@/hooks/use-global-view-mode";
 import { useAppStore } from "@/components/state-provider";
+import { useToast } from "@/components/toast-provider";
 import { useRunComment } from "@/hooks/domains/comments/use-run-comment";
 import type { DiffComment } from "@/lib/diff/types";
 import type { ReviewFile } from "./types";
@@ -383,17 +384,30 @@ function FileDiffHeader({
 
 function useCommentRunHandler(sessionId: string) {
   const activeTaskId = useAppStore((state) => state.tasks.activeTaskId);
-  const activeSession = useAppStore((state) => {
-    const sid = state.tasks.activeSessionId;
-    return sid ? (state.taskSessions.items[sid] ?? null) : null;
-  });
-  const isAgentBusy = activeSession?.state === "STARTING" || activeSession?.state === "RUNNING";
+  const { toast } = useToast();
   const { runComment } = useRunComment({
     sessionId,
     taskId: activeTaskId ?? null,
-    isAgentBusy,
   });
-  return useCallback((comment: DiffComment) => runComment(comment), [runComment]);
+  return useCallback(
+    async (comment: DiffComment) => {
+      try {
+        const { queued } = await runComment(comment);
+        toast({
+          title: "Comment sent",
+          description: queued ? "Queued for the agent." : "Sent to the agent.",
+        });
+      } catch (err) {
+        console.error("Failed to run diff comment:", err);
+        toast({
+          title: "Failed to send comment",
+          description: "Please try again.",
+          variant: "error",
+        });
+      }
+    },
+    [runComment, toast],
+  );
 }
 
 async function revertBlock(sessionId: string, filePath: string, info: RevertBlockInfo) {
