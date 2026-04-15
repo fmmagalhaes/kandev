@@ -7,18 +7,17 @@ import (
 )
 
 type AgentProfileDTO struct {
-	ID                         string    `json:"id"`
-	AgentID                    string    `json:"agent_id"`
-	Name                       string    `json:"name"`
-	AgentDisplayName           string    `json:"agent_display_name"`
-	Model                      string    `json:"model"`
-	AutoApprove                bool      `json:"auto_approve"`
-	DangerouslySkipPermissions bool      `json:"dangerously_skip_permissions"`
-	AllowIndexing              bool      `json:"allow_indexing"`
-	CLIPassthrough             bool      `json:"cli_passthrough"`
-	UserModified               bool      `json:"user_modified"`
-	CreatedAt                  time.Time `json:"created_at"`
-	UpdatedAt                  time.Time `json:"updated_at"`
+	ID               string    `json:"id"`
+	AgentID          string    `json:"agent_id"`
+	Name             string    `json:"name"`
+	AgentDisplayName string    `json:"agent_display_name"`
+	Model            string    `json:"model"`
+	Mode             string    `json:"mode,omitempty"`
+	AllowIndexing    bool      `json:"allow_indexing"`
+	CLIPassthrough   bool      `json:"cli_passthrough"`
+	UserModified     bool      `json:"user_modified"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }
 
 type TUIConfigDTO struct {
@@ -38,8 +37,14 @@ type AgentDTO struct {
 	MCPConfigPath string            `json:"mcp_config_path,omitempty"`
 	TUIConfig     *TUIConfigDTO     `json:"tui_config,omitempty"`
 	Profiles      []AgentProfileDTO `json:"profiles"`
-	CreatedAt     time.Time         `json:"created_at"`
-	UpdatedAt     time.Time         `json:"updated_at"`
+	// CapabilityStatus mirrors the host utility probe status so clients can
+	// flag agents that need login or reinstallation without fetching the
+	// full model config separately. "" for agents that aren't probed
+	// (mock, tui-only).
+	CapabilityStatus string    `json:"capability_status,omitempty"`
+	CapabilityError  string    `json:"capability_error,omitempty"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }
 
 type ListAgentsResponse struct {
@@ -70,16 +75,29 @@ type AgentCapabilitiesDTO struct {
 type ModelEntryDTO struct {
 	ID            string `json:"id"`
 	Name          string `json:"name"`
+	Description   string `json:"description,omitempty"`
 	Provider      string `json:"provider"`
 	ContextWindow int    `json:"context_window"`
 	IsDefault     bool   `json:"is_default"`
 	Source        string `json:"source,omitempty"`
+	// Meta carries agent-specific extras from ACP's `_meta` field. For
+	// GitHub Copilot this includes `copilotUsage` (e.g. "1x", "0.33x",
+	// "0x" — the premium-request multiplier) and `copilotEnablement`.
+	Meta map[string]any `json:"meta,omitempty"`
 }
 
 type ModelConfigDTO struct {
-	DefaultModel          string          `json:"default_model"`
-	AvailableModels       []ModelEntryDTO `json:"available_models"`
-	SupportsDynamicModels bool            `json:"supports_dynamic_models"`
+	DefaultModel          string            `json:"default_model"`
+	AvailableModels       []ModelEntryDTO   `json:"available_models"`
+	CurrentModelID        string            `json:"current_model_id,omitempty"`
+	AvailableModes        []ModeEntryDTO    `json:"available_modes,omitempty"`
+	CurrentModeID         string            `json:"current_mode_id,omitempty"`
+	AvailableCommands     []CommandEntryDTO `json:"available_commands,omitempty"`
+	SupportsDynamicModels bool              `json:"supports_dynamic_models"`
+	// Status reflects the host utility probe state for this agent type:
+	// "probing" | "ok" | "auth_required" | "not_installed" | "failed".
+	Status string `json:"status,omitempty"`
+	Error  string `json:"error,omitempty"`
 }
 
 type PermissionSettingDTO struct {
@@ -152,11 +170,29 @@ type CommandPreviewResponse struct {
 	CommandString string   `json:"command_string"`
 }
 
-// DynamicModelsResponse is the response for the dynamic models endpoint
+// DynamicModelsResponse is the response for the /agent-models/:agentName endpoint.
+// Data now comes from the host utility capability cache populated by ACP probes.
 type DynamicModelsResponse struct {
-	AgentName string          `json:"agent_name"`
-	Models    []ModelEntryDTO `json:"models"`
-	Cached    bool            `json:"cached"`
-	CachedAt  *time.Time      `json:"cached_at,omitempty"`
-	Error     *string         `json:"error"`
+	AgentName      string            `json:"agent_name"`
+	Status         string            `json:"status"` // "probing" | "ok" | "auth_required" | "not_installed" | "failed"
+	Models         []ModelEntryDTO   `json:"models"`
+	CurrentModelID string            `json:"current_model_id,omitempty"`
+	Modes          []ModeEntryDTO    `json:"modes,omitempty"`
+	CurrentModeID  string            `json:"current_mode_id,omitempty"`
+	Commands       []CommandEntryDTO `json:"commands,omitempty"`
+	Error          *string           `json:"error"`
+}
+
+// ModeEntryDTO is a single ACP session mode advertised by an agent.
+type ModeEntryDTO struct {
+	ID          string         `json:"id"`
+	Name        string         `json:"name"`
+	Description string         `json:"description,omitempty"`
+	Meta        map[string]any `json:"meta,omitempty"`
+}
+
+// CommandEntryDTO is a slash command advertised by the agent.
+type CommandEntryDTO struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
 }

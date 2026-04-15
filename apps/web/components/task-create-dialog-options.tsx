@@ -15,6 +15,7 @@ import type { AgentProfileOption } from "@/lib/state/slices";
 import { formatUserHomePath, truncateRepoPath } from "@/lib/utils";
 import { getExecutorIcon } from "@/lib/executor-icons";
 import { AgentLogo } from "@/components/agent-logo";
+import { getCapabilityWarning } from "@/lib/capability-warning";
 
 type OptionItem = {
   value: string;
@@ -114,6 +115,7 @@ export function useAgentProfileOptions(agentProfiles: AgentProfileOption[]): Opt
       const agentLabel = parts[0] ?? profile.label;
       const profileLabel = parts[1] ?? "";
       const isPassthrough = profile.cli_passthrough === true;
+      const warning = getCapabilityWarning(profile.capability_status, profile.capability_error);
       return {
         value: profile.id,
         label: profile.label,
@@ -122,6 +124,9 @@ export function useAgentProfileOptions(agentProfiles: AgentProfileOption[]): Opt
             <span className="flex shrink-0 items-center gap-1.5">
               <AgentLogo agentName={profile.agent_name} className="shrink-0" />
               <span>{agentLabel}</span>
+              {warning && (
+                <warning.Icon className={`size-3.5 ${warning.color}`} title={warning.title} />
+              )}
             </span>
             <span className="flex shrink-0 items-center gap-1.5">
               {isPassthrough && (

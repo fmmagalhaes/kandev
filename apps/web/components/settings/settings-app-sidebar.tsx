@@ -37,6 +37,7 @@ import { useAppStore } from "@/components/state-provider";
 import { useAvailableAgents } from "@/hooks/domains/settings/use-available-agents";
 import { AgentLogo } from "@/components/agent-logo";
 import { getExecutorIcon } from "@/lib/executor-icons";
+import { getCapabilityWarning } from "@/lib/capability-warning";
 import type { Workspace, Agent, AgentProfile, Executor } from "@/lib/types/http";
 
 type GeneralSidebarSectionProps = {
@@ -169,18 +170,20 @@ function AgentsSidebarSection({ pathname, agents }: AgentsSidebarSectionProps) {
               const encodedAgent = encodeURIComponent(agent.name);
               const profilePath = `/settings/agents/${encodedAgent}/profiles/${profile.id}`;
               const agentLabel = profile.agent_display_name || agent.name;
+              const warning = getCapabilityWarning(agent.capability_status, agent.capability_error);
               return (
                 <SidebarMenuSubItem key={profile.id} className="min-w-0">
                   <SidebarMenuSubButton asChild isActive={pathname === profilePath}>
                     <Link
                       href={profilePath}
                       className="!flex min-w-0 items-center gap-1.5"
-                      title={`${agentLabel} • ${profile.name}`}
+                      title={warning?.title || `${agentLabel} • ${profile.name}`}
                     >
                       <AgentLogo agentName={agent.name} className="shrink-0" />
                       <ScrollOnOverflow className="min-w-0">
                         {agentLabel} • {profile.name}
                       </ScrollOnOverflow>
+                      {warning && <warning.Icon className={`size-3.5 shrink-0 ${warning.color}`} />}
                     </Link>
                   </SidebarMenuSubButton>
                 </SidebarMenuSubItem>

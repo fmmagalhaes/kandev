@@ -1,11 +1,13 @@
 "use client";
 
-import { FormEvent } from "react";
+import { FormEvent, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@kandev/ui/dialog";
 import type { Task } from "@/lib/types/http";
 import type { AgentProfileOption } from "@/lib/state/slices";
 import { SHORTCUTS } from "@/lib/keyboard/constants";
+import { useIsUtilityConfigured } from "@/hooks/use-is-utility-configured";
 import { useKeyboardShortcutHandler } from "@/hooks/use-keyboard-shortcut";
+import { useUtilityAgentGenerator } from "@/hooks/use-utility-agent-generator";
 import { TaskCreateDialogFooter } from "@/components/task-create-dialog-footer";
 import {
   CreateEditSelectors,
@@ -260,6 +262,7 @@ type DialogFormBodyProps = {
   onWorkflowChange: (v: string) => void;
   hasRepositorySelection: boolean;
   isLocalExecutor: boolean;
+  enhance?: { onEnhance: () => void; isLoading: boolean; isConfigured: boolean };
 };
 
 function DialogFormBody({
@@ -288,6 +291,7 @@ function DialogFormBody({
   onWorkflowChange,
   hasRepositorySelection,
   isLocalExecutor,
+  enhance,
 }: DialogFormBodyProps) {
   return (
     <div className="flex-1 space-y-4 overflow-y-auto pr-1">
@@ -300,15 +304,13 @@ function DialogFormBody({
         onKeyDown={handleKeyDown}
         descriptionValueRef={fs.descriptionInputRef}
         disabled={isTaskStarted || isPassthroughProfile}
-        placeholder={
-          isPassthroughProfile ? "Sending a prompt is not supported in passthrough mode" : undefined
-        }
+        placeholder={isPassthroughProfile ? "Passthrough mode — prompt not supported" : undefined}
+        onEnhancePrompt={enhance?.onEnhance}
+        isEnhancingPrompt={enhance?.isLoading}
+        isUtilityConfigured={enhance?.isConfigured}
       />
       {isPassthroughProfile && hasDescription && (
-        <p className="text-xs text-amber-500">
-          Prompt will be ignored — passthrough sessions don&apos;t support sending a prompt on
-          start.
-        </p>
+        <p className="text-xs text-amber-500">Prompt ignored — passthrough mode active</p>
       )}
       {!isSessionMode && (
         <CreateEditSelectors
@@ -363,16 +365,27 @@ function DialogFormBody({
   );
 }
 
+function useEnhanceForDialog(fs: DialogFormState) {
+  const isConfigured = useIsUtilityConfigured();
+  const { enhancePrompt, isEnhancingPrompt } = useUtilityAgentGenerator({
+    sessionId: null,
+    taskTitle: fs.taskName,
+  });
+  const onEnhance = useCallback(() => {
+    const current = fs.descriptionInputRef.current?.getValue()?.trim();
+    if (!current) return;
+    enhancePrompt(current, (enhanced) => {
+      fs.descriptionInputRef.current?.setValue(enhanced);
+      fs.setHasDescription(true);
+    });
+  }, [enhancePrompt, fs]);
+  return { onEnhance, isLoading: isEnhancingPrompt, isConfigured };
+}
+
 function useTaskCreateDialogSetup(props: TaskCreateDialogProps) {
   const { open, onOpenChange, mode = "create", workspaceId, workflowId, defaultStepId } = props;
-  const {
-    editingTask,
-    onSuccess,
-    onCreateSession,
-    initialValues,
-    taskId = null,
-    parentTaskId,
-  } = props;
+  const { editingTask, onSuccess, onCreateSession, initialValues, parentTaskId } = props;
+  const taskId = props.taskId ?? null;
   const isSessionMode = mode === "session";
   const isEditMode = mode === "edit";
   const isCreateMode = mode === "create";
@@ -461,6 +474,7 @@ function useTaskCreateDialogSetup(props: TaskCreateDialogProps) {
     handlers,
     submitHandlers,
     handleKeyDown,
+    enhance: useEnhanceForDialog(fs),
   };
 }
 
@@ -528,6 +542,7 @@ export function TaskCreateDialog(props: TaskCreateDialogProps) {
             onWorkflowChange={handlers.handleWorkflowChange}
             hasRepositorySelection={computed.hasRepositorySelection}
             isLocalExecutor={computed.isLocalExecutor}
+            enhance={setup.enhance}
           />
           <DialogFooter className="border-t border-border pt-3 flex-col gap-3 sm:flex-row sm:gap-2">
             <TaskCreateDialogFooter

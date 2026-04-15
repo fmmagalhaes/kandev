@@ -5,11 +5,14 @@ export type AgentProfile = {
   agent_id: string;
   name: string;
   agent_display_name: string;
+  /** Model ID applied via ACP session/set_model at session start. */
   model: string;
-  auto_approve: boolean;
-  dangerously_skip_permissions: boolean;
+  /** Optional ACP session mode applied via session/set_mode at session start. */
+  mode?: string;
+  /** Auggie-only CLI flag; ignored for all other agents. */
   allow_indexing: boolean;
   cli_passthrough: boolean;
+  user_modified?: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -31,6 +34,14 @@ export type Agent = {
   mcp_config_path?: string | null;
   tui_config?: TUIConfig | null;
   profiles: AgentProfile[];
+  /**
+   * Host utility probe status for this agent type — mirrors
+   * `ModelConfig.status`. Populated by the backend from the host utility
+   * cache so clients can flag profiles that need login or reinstallation
+   * without fetching the full model config separately.
+   */
+  capability_status?: CapabilityStatus;
+  capability_error?: string;
   created_at: string;
   updated_at: string;
 };
@@ -75,23 +86,62 @@ export type AgentCapabilities = {
 export type ModelEntry = {
   id: string;
   name: string;
-  provider: string;
-  context_window: number;
-  is_default: boolean;
+  description?: string;
+  provider?: string;
+  context_window?: number;
+  is_default?: boolean;
   source?: "static" | "dynamic";
+  /**
+   * Agent-specific extras from ACP's `_meta` field. GitHub Copilot exposes
+   * `copilotUsage` (e.g. "1x", "0.33x", "0x" — premium-request multiplier)
+   * and `copilotEnablement`.
+   */
+  meta?: Record<string, unknown>;
 };
+
+export type ModeEntry = {
+  id: string;
+  name: string;
+  description?: string;
+  meta?: Record<string, unknown>;
+};
+
+export type CommandEntry = {
+  name: string;
+  description?: string;
+};
+
+// CapabilityStatus mirrors the host utility probe status. "probing" is the
+// in-flight state; "ok" is populated; the remaining values signal errors the
+// UI can surface directly (auth, install, generic failure, not started yet).
+export type CapabilityStatus =
+  | "probing"
+  | "ok"
+  | "auth_required"
+  | "not_installed"
+  | "failed"
+  | "not_configured";
 
 export type ModelConfig = {
   default_model: string;
   available_models: ModelEntry[];
+  current_model_id?: string;
+  available_modes?: ModeEntry[];
+  current_mode_id?: string;
+  available_commands?: CommandEntry[];
   supports_dynamic_models: boolean;
+  status?: CapabilityStatus;
+  error?: string;
 };
 
 export type DynamicModelsResponse = {
   agent_name: string;
+  status: CapabilityStatus;
   models: ModelEntry[];
-  cached: boolean;
-  cached_at?: string;
+  current_model_id?: string;
+  modes?: ModeEntry[];
+  current_mode_id?: string;
+  commands?: CommandEntry[];
   error: string | null;
 };
 

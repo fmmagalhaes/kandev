@@ -32,7 +32,7 @@ type CodexACP struct {
 func NewCodexACP() *CodexACP {
 	return &CodexACP{
 		StandardPassthrough: StandardPassthrough{
-			PermSettings: codexPermSettings,
+			PermSettings: emptyPermSettings,
 			Cfg: PassthroughConfig{
 				Supported:      true,
 				Label:          "CLI Passthrough",
@@ -63,19 +63,14 @@ func (a *CodexACP) Logo(v LogoVariant) []byte {
 }
 
 func (a *CodexACP) IsInstalled(ctx context.Context) (*DiscoveryResult, error) {
-	result, err := Detect(ctx, WithFileExists("~/.codex/auth.json"))
+	// Check for the CLI binary on PATH. Auth state is surfaced later by the
+	// ACP probe (session/new returns auth_required if the user hasn't logged in).
+	result, err := Detect(ctx, WithCommand("codex-acp"), WithCommand("codex"))
 	if err != nil {
 		return result, err
 	}
 	result.SupportsMCP = true
-	result.InstallationPaths = []string{expandHomePath("~/.codex/auth.json")}
 	return result, nil
-}
-
-func (a *CodexACP) DefaultModel() string { return "gpt-5.3-codex" }
-
-func (a *CodexACP) ListModels(ctx context.Context) (*ModelList, error) {
-	return &ModelList{Models: codexStaticModels(), SupportsDynamic: false}, nil
 }
 
 func (a *CodexACP) BuildCommand(opts CommandOptions) Command {
@@ -129,7 +124,7 @@ func (a *CodexACP) InstallScript() string {
 }
 
 func (a *CodexACP) PermissionSettings() map[string]PermissionSetting {
-	return codexPermSettings
+	return emptyPermSettings
 }
 
 // InferenceConfig returns configuration for one-shot inference using ACP.
@@ -137,11 +132,5 @@ func (a *CodexACP) InferenceConfig() *InferenceConfig {
 	return &InferenceConfig{
 		Supported: true,
 		Command:   NewCommand("npx", "-y", codexACPPkg),
-		ModelFlag: NewParam("-m", "{model}"),
 	}
-}
-
-// InferenceModels returns models available for one-shot inference.
-func (a *CodexACP) InferenceModels() []InferenceModel {
-	return ModelsToInferenceModels(codexStaticModels())
 }

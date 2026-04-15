@@ -32,7 +32,7 @@ type ClaudeACP struct {
 func NewClaudeACP() *ClaudeACP {
 	return &ClaudeACP{
 		StandardPassthrough: StandardPassthrough{
-			PermSettings: claudeCodePermSettings,
+			PermSettings: emptyPermSettings,
 			Cfg: PassthroughConfig{
 				Supported:         true,
 				Label:             "CLI Passthrough",
@@ -65,25 +65,17 @@ func (a *ClaudeACP) Logo(v LogoVariant) []byte {
 }
 
 func (a *ClaudeACP) IsInstalled(ctx context.Context) (*DiscoveryResult, error) {
-	// Use the same detection as claude-code: check for ~/.claude.json which is
-	// created after onboarding. Just having npx is not enough — the user needs
-	// Claude Code actually set up.
-	result, err := Detect(ctx, WithFileExists("~/.claude.json"))
+	// Check for the Claude Code CLI on PATH. Auth state is surfaced later by
+	// the ACP probe, not by the presence of ~/.claude.json.
+	result, err := Detect(ctx, WithCommand("claude"))
 	if err != nil {
 		return result, err
 	}
 	result.SupportsMCP = true
-	result.InstallationPaths = []string{expandHomePath("~/.claude.json")}
 	result.Capabilities = DiscoveryCapabilities{
 		SupportsSessionResume: true,
 	}
 	return result, nil
-}
-
-func (a *ClaudeACP) DefaultModel() string { return "claude-sonnet-4-6" }
-
-func (a *ClaudeACP) ListModels(ctx context.Context) (*ModelList, error) {
-	return &ModelList{Models: claudeCodeStaticModels(), SupportsDynamic: true}, nil
 }
 
 func (a *ClaudeACP) BuildCommand(opts CommandOptions) Command {
@@ -140,7 +132,7 @@ func (a *ClaudeACP) InstallScript() string {
 }
 
 func (a *ClaudeACP) PermissionSettings() map[string]PermissionSetting {
-	return claudeCodePermSettings
+	return emptyPermSettings
 }
 
 // InferenceConfig returns configuration for one-shot inference using ACP.
@@ -148,11 +140,5 @@ func (a *ClaudeACP) InferenceConfig() *InferenceConfig {
 	return &InferenceConfig{
 		Supported: true,
 		Command:   NewCommand("npx", "-y", claudeACPPkg),
-		ModelFlag: NewParam("--model", "{model}"),
 	}
-}
-
-// InferenceModels returns models available for one-shot inference tasks.
-func (a *ClaudeACP) InferenceModels() []InferenceModel {
-	return ModelsToInferenceModels(claudeCodeStaticModels())
 }
