@@ -27,6 +27,8 @@ interface TasksPageClientProps {
 
 type UseTaskOperationsParams = {
   activeWorkspaceId: string | null;
+  activeWorkflowId: string | null;
+  selectedRepositoryId: string | null;
   pagination: PaginationState;
   debouncedQuery: string;
   showArchived: boolean;
@@ -36,6 +38,8 @@ type UseTaskOperationsParams = {
 
 function useTaskOperations({
   activeWorkspaceId,
+  activeWorkflowId,
+  selectedRepositoryId,
   pagination,
   debouncedQuery,
   showArchived,
@@ -55,6 +59,8 @@ function useTaskOperations({
         pageSize: pagination.pageSize,
         query: debouncedQuery,
         includeArchived: showArchived,
+        workflowId: activeWorkflowId,
+        repositoryId: selectedRepositoryId,
       });
       setTasks(result.tasks);
       setTotal(result.total);
@@ -69,6 +75,8 @@ function useTaskOperations({
     }
   }, [
     activeWorkspaceId,
+    activeWorkflowId,
+    selectedRepositoryId,
     pagination.pageIndex,
     pagination.pageSize,
     debouncedQuery,
@@ -301,8 +309,6 @@ function useTasksPageComputed({
   router,
   activeWorkflowId,
   tasks,
-  allRepositoriesSelected,
-  selectedRepositoryId,
 }: {
   total: number;
   pagination: PaginationState;
@@ -315,8 +321,6 @@ function useTasksPageComputed({
   router: ReturnType<typeof useRouter>;
   activeWorkflowId: string | null;
   tasks: Task[];
-  allRepositoriesSelected: boolean;
-  selectedRepositoryId: string | null;
 }) {
   const pageCount = useMemo(
     () => Math.ceil(total / pagination.pageSize),
@@ -345,20 +349,7 @@ function useTasksPageComputed({
     : workflows[0];
   const defaultStep = steps.find((s) => s.workflow_id === defaultWorkflow?.id);
 
-  const filteredTasks = useMemo(() => {
-    let result = tasks;
-    if (activeWorkflowId) {
-      result = result.filter((t) => t.workflow_id === activeWorkflowId);
-    }
-    if (!allRepositoriesSelected && selectedRepositoryId) {
-      result = result.filter((t) =>
-        t.repositories?.some((r) => r.repository_id === selectedRepositoryId),
-      );
-    }
-    return result;
-  }, [tasks, activeWorkflowId, allRepositoriesSelected, selectedRepositoryId]);
-
-  return { pageCount, columns, handleRowClick, defaultWorkflow, defaultStep, filteredTasks };
+  return { pageCount, columns, handleRowClick, defaultWorkflow, defaultStep, filteredTasks: tasks };
 }
 
 function useTasksPageSetup(props: TasksPageClientProps) {
@@ -367,7 +358,6 @@ function useTasksPageSetup(props: TasksPageClientProps) {
     activeWorkspaceId,
     activeWorkflowId,
     repositories: storeRepositories,
-    allRepositoriesSelected,
     selectedRepositoryId,
   } = useKanbanDisplaySettings();
   const viewState = useTasksPageViewState({
@@ -381,6 +371,8 @@ function useTasksPageSetup(props: TasksPageClientProps) {
   const debouncedQuery = useDebounce(viewState.searchQuery, 300);
   const ops = useTaskOperations({
     activeWorkspaceId,
+    activeWorkflowId,
+    selectedRepositoryId,
     pagination: viewState.pagination,
     debouncedQuery,
     showArchived: viewState.showArchived,
@@ -407,8 +399,6 @@ function useTasksPageSetup(props: TasksPageClientProps) {
     router,
     activeWorkflowId,
     tasks: viewState.tasks,
-    allRepositoriesSelected,
-    selectedRepositoryId,
   });
   return { ...viewState, ...ops, ...computed, activeWorkspaceId, debouncedQuery };
 }

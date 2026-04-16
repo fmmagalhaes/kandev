@@ -668,8 +668,9 @@ func (s *Service) ListTasks(ctx context.Context, workflowID string) ([]*models.T
 
 // ListTasksByWorkspace returns paginated tasks for a workspace with task repositories loaded.
 // If query is non-empty, filters by task title, description, repository name, or repository path.
-func (s *Service) ListTasksByWorkspace(ctx context.Context, workspaceID string, query string, page, pageSize int, includeArchived, includeEphemeral, onlyEphemeral, excludeConfig bool) ([]*models.Task, int, error) {
-	tasks, total, err := s.tasks.ListTasksByWorkspace(ctx, workspaceID, query, page, pageSize, includeArchived, includeEphemeral, onlyEphemeral, excludeConfig)
+// workflowID and repositoryID, when non-empty, further restrict results to that workflow/repository.
+func (s *Service) ListTasksByWorkspace(ctx context.Context, workspaceID, workflowID, repositoryID, query string, page, pageSize int, includeArchived, includeEphemeral, onlyEphemeral, excludeConfig bool) ([]*models.Task, int, error) {
+	tasks, total, err := s.tasks.ListTasksByWorkspace(ctx, workspaceID, workflowID, repositoryID, query, page, pageSize, includeArchived, includeEphemeral, onlyEphemeral, excludeConfig)
 	if err != nil {
 		return nil, 0, err
 	}

@@ -123,7 +123,7 @@ export async function archiveTask(taskId: string, options?: ApiRequestOptions) {
 
 export async function listTasksByWorkspace(
   workspaceId: string,
-  params: { page?: number; pageSize?: number; query?: string; includeArchived?: boolean } = {},
+  params: { page?: number; pageSize?: number; query?: string; includeArchived?: boolean; workflowId?: string | null; repositoryId?: string | null } = {},
   options?: ApiRequestOptions,
 ) {
   const baseUrl = options?.baseUrl ?? getBackendConfig().apiBaseUrl;
@@ -132,5 +132,7 @@ export async function listTasksByWorkspace(
   if (params.pageSize) url.searchParams.set("page_size", String(params.pageSize));
   if (params.query) url.searchParams.set("query", params.query);
   if (params.includeArchived) url.searchParams.set("include_archived", "true");
+  if (params.workflowId) url.searchParams.set("workflow_id", params.workflowId);
+  if (params.repositoryId) url.searchParams.set("repository_id", params.repositoryId);
   return fetchJson<ListTasksResponse>(url.toString(), options);
 }

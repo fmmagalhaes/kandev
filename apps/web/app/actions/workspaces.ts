@@ -101,11 +101,15 @@ export async function listTasksByWorkspaceAction(
   page = 1,
   pageSize = 50,
   query = "",
+  workflowId?: string | null,
+  repositoryId?: string | null,
 ): Promise<ListTasksResponse> {
   const url = new URL(`${apiBaseUrl}/api/v1/workspaces/${workspaceId}/tasks`);
   url.searchParams.set("page", String(page));
   url.searchParams.set("page_size", String(pageSize));
   if (query) url.searchParams.set("query", query);
+  if (workflowId) url.searchParams.set("workflow_id", workflowId);
+  if (repositoryId) url.searchParams.set("repository_id", repositoryId);
   return fetchJson<ListTasksResponse>(url.toString());
 }
 

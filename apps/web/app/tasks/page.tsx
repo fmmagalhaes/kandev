@@ -28,7 +28,6 @@ export default async function TasksPage({
   let workspaceId = workspaceParam;
   let userSettingsResponse: UserSettingsResponse | null = null;
   let activeWorkflowId: string | null = null;
-  let activeRepositoryId: string | null = null;
 
   try {
     const [workspacesResponse, settingsResponse] = await Promise.all([
@@ -45,32 +44,25 @@ export default async function TasksPage({
 
     if (workspaceId) {
       // Fetch all data in parallel (including steps via single batch endpoint)
+      // Resolve active filters before fetching tasks so the server applies them
+      const savedWorkflowId = settingsResponse?.settings?.workflow_filter_id || null;
+      const savedRepositoryId = settingsResponse?.settings?.repository_ids?.[0] ?? null;
+
       const [workflowsResponse, repositoriesResponse, tasksResponse, stepsResponse] =
         await Promise.all([
           listWorkflowsAction(workspaceId),
           listRepositoriesAction(workspaceId),
-          listTasksByWorkspaceAction(workspaceId, 1, 25),
+          listTasksByWorkspaceAction(workspaceId, 1, 25, "", savedWorkflowId, savedRepositoryId),
           listWorkspaceWorkflowStepsAction(workspaceId),
         ]);
 
       workflows = workflowsResponse.workflows;
       repositories = repositoriesResponse.repositories;
 
-      // Resolve active workflow: user settings > first workflow
-      const savedWorkflowId = settingsResponse?.settings?.workflow_filter_id || null;
-      const preferred = workflows.find((w) => w.id === savedWorkflowId);
-      activeWorkflowId = preferred?.id ?? workflows[0]?.id ?? null;
-
-      // Resolve active repository filter from user settings
-      activeRepositoryId = settingsResponse?.settings?.repository_ids?.[0] ?? null;
+      activeWorkflowId = workflows.find((w) => w.id === savedWorkflowId)?.id ?? workflows[0]?.id ?? null;
 
       total = tasksResponse.total;
-
-      // Pre-filter by workflow + repository to match the active display filters,
-      // so the initial render is already correct without waiting for store hydration.
       tasks = tasksResponse.tasks;
-      if (activeWorkflowId) tasks = tasks.filter((t) => t.workflow_id === activeWorkflowId);
-      if (activeRepositoryId) tasks = tasks.filter((t) => t.repositories?.some((r) => r.repository_id === activeRepositoryId));
       steps = stepsResponse.steps;
     }
   } catch (error) {

@@ -179,7 +179,7 @@ func (r *Repository) ListTasksByWorkflowStep(ctx context.Context, workflowStepID
 // If includeArchived is false, archived tasks are excluded
 // If includeEphemeral is false, ephemeral tasks are excluded
 // If onlyEphemeral is true, only ephemeral tasks are returned
-func (r *Repository) ListTasksByWorkspace(ctx context.Context, workspaceID string, query string, page, pageSize int, includeArchived, includeEphemeral, onlyEphemeral, excludeConfig bool) ([]*models.Task, int, error) {
+func (r *Repository) ListTasksByWorkspace(ctx context.Context, workspaceID, workflowID, repositoryID, query string, page, pageSize int, includeArchived, includeEphemeral, onlyEphemeral, excludeConfig bool) ([]*models.Task, int, error) {
 	ctx, span := tracing.Tracer("kandev-db").Start(ctx, "db.ListTasksByWorkspace")
 	defer span.End()
 	// Calculate offset
@@ -212,9 +212,9 @@ func (r *Repository) ListTasksByWorkspace(ctx context.Context, workspaceID strin
 	var err error
 
 	if query == "" {
-		rows, total, err = r.queryAllTasks(ctx, workspaceID, filter, pageSize, offset)
+		rows, total, err = r.queryAllTasks(ctx, workspaceID, filter, workflowID, repositoryID, pageSize, offset)
 	} else {
-		rows, total, err = r.searchTasks(ctx, workspaceID, query, filter, pageSize, offset, includeArchived, includeEphemeral, onlyEphemeral, excludeConfig)
+		rows, total, err = r.searchTasks(ctx, workspaceID, query, filter, workflowID, repositoryID, pageSize, offset, includeArchived, includeEphemeral, onlyEphemeral, excludeConfig)
 	}
 
 	if err != nil {
@@ -231,24 +231,33 @@ func (r *Repository) ListTasksByWorkspace(ctx context.Context, workspaceID strin
 }
 
 // queryAllTasks fetches all tasks (no search) for a workspace with pagination.
-func (r *Repository) queryAllTasks(ctx context.Context, workspaceID, archiveFilter string, pageSize, offset int) (*sql.Rows, int, error) {
+func (r *Repository) queryAllTasks(ctx context.Context, workspaceID, archiveFilter, workflowID, repositoryID string, pageSize, offset int) (*sql.Rows, int, error) {
+	filter := archiveFilter
+	args := []interface{}{workspaceID}
+	if workflowID != "" {
+		filter += " AND workflow_id = ?"
+		args = append(args, workflowID)
+	}
+	if repositoryID != "" {
+		filter += " AND id IN (SELECT task_id FROM task_repositories WHERE repository_id = ?)"
+		args = append(args, repositoryID)
+	}
 	var total int
-	err := r.ro.QueryRowContext(ctx, r.ro.Rebind(`SELECT COUNT(*) FROM tasks WHERE workspace_id = ?`+archiveFilter), workspaceID).Scan(&total)
-	if err != nil {
+	if err := r.ro.QueryRowContext(ctx, r.ro.Rebind(`SELECT COUNT(*) FROM tasks WHERE workspace_id = ?`+filter), args...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 	rows, err := r.ro.QueryContext(ctx, r.ro.Rebind(`
 		SELECT id, workspace_id, workflow_id, workflow_step_id, title, description, state, priority, position, metadata, is_ephemeral, parent_id, archived_at, created_at, updated_at
 		FROM tasks
-		WHERE workspace_id = ?`+archiveFilter+`
+		WHERE workspace_id = ?`+filter+`
 		ORDER BY updated_at DESC
 		LIMIT ? OFFSET ?
-	`), workspaceID, pageSize, offset)
+	`), append(args, pageSize, offset)...)
 	return rows, total, err
 }
 
 // searchTasks fetches tasks matching a search query for a workspace with pagination.
-func (r *Repository) searchTasks(ctx context.Context, workspaceID, query, filter string, pageSize, offset int, includeArchived, includeEphemeral, onlyEphemeral, excludeConfig bool) (*sql.Rows, int, error) {
+func (r *Repository) searchTasks(ctx context.Context, workspaceID, query, filter, workflowID, repositoryID string, pageSize, offset int, includeArchived, includeEphemeral, onlyEphemeral, excludeConfig bool) (*sql.Rows, int, error) {
 	searchPattern := "%" + query + "%"
 	like := dialect.Like(r.ro.DriverName())
 
@@ -266,6 +275,17 @@ func (r *Repository) searchTasks(ctx context.Context, workspaceID, query, filter
 		tFilter += " AND (t.metadata IS NULL OR json_extract(t.metadata, '$.config_mode') IS NOT 1)"
 	}
 
+	// Collect extra filter args in query-argument order
+	var extraArgs []interface{}
+	if workflowID != "" {
+		tFilter += " AND t.workflow_id = ?"
+		extraArgs = append(extraArgs, workflowID)
+	}
+	if repositoryID != "" {
+		tFilter += " AND tr.repository_id = ?"
+		extraArgs = append(extraArgs, repositoryID)
+	}
+
 	countQuery := fmt.Sprintf(`
 		SELECT COUNT(DISTINCT t.id) FROM tasks t
 		LEFT JOIN task_repositories tr ON t.id = tr.task_id
@@ -278,8 +298,9 @@ func (r *Repository) searchTasks(ctx context.Context, workspaceID, query, filter
 			r.local_path %s ?
 		)
 	`, tFilter, like, like, like, like)
+	countArgs := append(append([]interface{}{workspaceID}, extraArgs...), searchPattern, searchPattern, searchPattern, searchPattern)
 	var total int
-	if err := r.ro.QueryRowContext(ctx, r.ro.Rebind(countQuery), workspaceID, searchPattern, searchPattern, searchPattern, searchPattern).Scan(&total); err != nil {
+	if err := r.ro.QueryRowContext(ctx, r.ro.Rebind(countQuery), countArgs...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 
@@ -298,7 +319,8 @@ func (r *Repository) searchTasks(ctx context.Context, workspaceID, query, filter
 		ORDER BY t.updated_at DESC
 		LIMIT ? OFFSET ?
 	`, tFilter, like, like, like, like)
-	rows, err := r.ro.QueryContext(ctx, r.ro.Rebind(selectQuery), workspaceID, searchPattern, searchPattern, searchPattern, searchPattern, pageSize, offset)
+	selectArgs := append(countArgs, pageSize, offset)
+	rows, err := r.ro.QueryContext(ctx, r.ro.Rebind(selectQuery), selectArgs...)
 	return rows, total, err
 }
 
