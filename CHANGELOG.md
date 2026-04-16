@@ -2,6 +2,39 @@
 
 All notable changes to Kandev.
 
+## 0.33 - 2026-04-16
+
+### Features
+
+- add start_agent and local_path params to create_task ([#505](https://github.com/kdlbs/kandev/pull/505))
+- acp-first profiles, models, and modes ([#566](https://github.com/kdlbs/kandev/pull/566))
+
+### Bug Fixes
+
+- improve plan comment formatting to match code review style ([#600](https://github.com/kdlbs/kandev/pull/600))
+- skip ExtraFiles liveness pipe on Windows to fix agentctl startup ([#599](https://github.com/kdlbs/kandev/pull/599))
+- disable resume and show agent selector when profile is deleted ([#578](https://github.com/kdlbs/kandev/pull/578))
+- add confirmation dialog before deleting agent profile ([#596](https://github.com/kdlbs/kandev/pull/596))
+- replace mermaid bomb-icon error flood with toast notifications ([#594](https://github.com/kdlbs/kandev/pull/594))
+- fix dock view task-switching regressions ([#595](https://github.com/kdlbs/kandev/pull/595))
+- use dynamic merge-base for git commits to filter main branch commits ([#504](https://github.com/kdlbs/kandev/pull/504))
+- read session state at call time in comment run to prevent stale queue ([#588](https://github.com/kdlbs/kandev/pull/588))
+- reject session resume when task is archived ([#593](https://github.com/kdlbs/kandev/pull/593))
+- migrate agent_profiles to drop CHECK(model != '') constraint ([#590](https://github.com/kdlbs/kandev/pull/590))
+- prevent session failure toast from re-appearing after dismiss ([#591](https://github.com/kdlbs/kandev/pull/591))
+- inherit repo and default to worktree executor for MCP-created tasks ([#592](https://github.com/kdlbs/kandev/pull/592))
+- always enable cgo on build ([#586](https://github.com/kdlbs/kandev/pull/586))
+- handle submodules in worktree creation ([#579](https://github.com/kdlbs/kandev/pull/579))
+- add bottom margin to settings layout ([#581](https://github.com/kdlbs/kandev/pull/581))
+- correct GitHub org URL in CONTRIBUTING.md ([#584](https://github.com/kdlbs/kandev/pull/584))
+- stop vertical scroll on mobile column tabs ([#583](https://github.com/kdlbs/kandev/pull/583))
+- disable inherited git-crypt filters when repo is locked ([#577](https://github.com/kdlbs/kandev/pull/577))
+- handle locked git-crypt repos and localized git errors ([#532](https://github.com/kdlbs/kandev/pull/532))
+
+### Refactoring
+
+- re-key dockview panel state by environmentId instead of sessionId ([#491](https://github.com/kdlbs/kandev/pull/491))
+
 ## 0.32 - 2026-04-13
 
 ### Features
