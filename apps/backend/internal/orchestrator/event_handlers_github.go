@@ -30,7 +30,9 @@ type GitHubService interface {
 	AssociatePRWithTask(ctx context.Context, taskID string, pr *github.PR) (*github.TaskPR, error)
 	GetTaskPR(ctx context.Context, taskID string) (*github.TaskPR, error)
 	ListActivePRWatches(ctx context.Context) ([]*github.PRWatch, error)
-	RecordReviewPRTask(ctx context.Context, watchID, repoOwner, repoName string, prNumber int, prURL, taskID string) error
+	ReserveReviewPRTask(ctx context.Context, watchID, repoOwner, repoName string, prNumber int, prURL string) (bool, error)
+	AssignReviewPRTaskID(ctx context.Context, watchID, repoOwner, repoName string, prNumber int, taskID string) error
+	ReleaseReviewPRTask(ctx context.Context, watchID, repoOwner, repoName string, prNumber int) error
 }
 
 // ReviewTaskCreator creates tasks from review watch events.
@@ -125,57 +127,22 @@ func (s *Service) createReviewTask(ctx context.Context, evt *github.NewReviewPRE
 		zap.String("base_branch", pr.BaseBranch),
 		zap.String("review_watch_id", evt.ReviewWatchID))
 
-	title := fmt.Sprintf("PR #%d: %s", pr.Number, pr.Title)
-	description := interpolateReviewPrompt(evt.Prompt, pr)
+	if !s.reserveReviewPR(ctx, evt) {
+		return
+	}
 
-	// Resolve repository: clone if needed, find-or-create DB record
 	repositories := s.resolveReviewRepository(ctx, evt.WorkspaceID, pr)
-
-	task, err := s.reviewTaskCreator.CreateReviewTask(ctx, &ReviewTaskRequest{
-		WorkspaceID:    evt.WorkspaceID,
-		WorkflowID:     evt.WorkflowID,
-		WorkflowStepID: evt.WorkflowStepID,
-		Title:          title,
-		Description:    description,
-		Repositories:   repositories,
-		Metadata: map[string]interface{}{
-			"review_watch_id":     evt.ReviewWatchID,
-			"pr_number":           pr.Number,
-			"pr_url":              pr.HTMLURL,
-			"pr_repo":             repoSlug,
-			"pr_author":           pr.AuthorLogin,
-			"pr_branch":           pr.HeadBranch,
-			"agent_profile_id":    evt.AgentProfileID,
-			"executor_profile_id": evt.ExecutorProfileID,
-		},
-	})
+	task, err := s.reviewTaskCreator.CreateReviewTask(ctx, buildReviewTaskRequest(evt, repositories, repoSlug))
 	if err != nil {
 		s.logger.Error("failed to create review task",
 			zap.String("review_watch_id", evt.ReviewWatchID),
 			zap.Int("pr_number", pr.Number),
 			zap.Error(err))
+		s.releaseReviewPR(ctx, evt)
 		return
 	}
 
-	// Record dedup entry so this PR won't be picked up again
-	if s.githubService != nil {
-		if recordErr := s.githubService.RecordReviewPRTask(
-			ctx, evt.ReviewWatchID, pr.RepoOwner, pr.RepoName, pr.Number, pr.HTMLURL, task.ID,
-		); recordErr != nil {
-			s.logger.Error("failed to record review PR task",
-				zap.String("task_id", task.ID),
-				zap.Int("pr_number", pr.Number),
-				zap.Error(recordErr))
-		}
-
-		// Associate PR with task so the frontend can display PR info
-		if _, assocErr := s.githubService.AssociatePRWithTask(ctx, task.ID, pr); assocErr != nil {
-			s.logger.Error("failed to associate PR with review task",
-				zap.String("task_id", task.ID),
-				zap.Int("pr_number", pr.Number),
-				zap.Error(assocErr))
-		}
-	}
+	s.attachTaskToReservation(ctx, evt, task.ID)
 
 	s.logger.Info("created review task",
 		zap.String("task_id", task.ID),
@@ -189,6 +156,96 @@ func (s *Service) createReviewTask(ctx context.Context, evt *github.NewReviewPRE
 		return
 	}
 	s.autoStartReviewTask(ctx, evt, task)
+}
+
+// reserveReviewPR atomically claims the dedup slot before the slow clone +
+// task creation. Returns false (caller must bail) if another handler already
+// holds the slot or if the reserve call errored. A nil githubService means
+// dedup is disabled and we always proceed.
+func (s *Service) reserveReviewPR(ctx context.Context, evt *github.NewReviewPREvent) bool {
+	if s.githubService == nil {
+		return true
+	}
+	pr := evt.PR
+	reserved, err := s.githubService.ReserveReviewPRTask(
+		ctx, evt.ReviewWatchID, pr.RepoOwner, pr.RepoName, pr.Number, pr.HTMLURL,
+	)
+	if err != nil {
+		s.logger.Error("failed to reserve review PR slot",
+			zap.String("review_watch_id", evt.ReviewWatchID),
+			zap.Int("pr_number", pr.Number),
+			zap.Error(err))
+		return false
+	}
+	if !reserved {
+		s.logger.Debug("review PR already reserved by concurrent handler, skipping",
+			zap.String("review_watch_id", evt.ReviewWatchID),
+			zap.Int("pr_number", pr.Number))
+		return false
+	}
+	return true
+}
+
+// releaseReviewPR removes the reservation when task creation fails so a later
+// poll can retry this PR instead of it being blocked by an orphan row.
+func (s *Service) releaseReviewPR(ctx context.Context, evt *github.NewReviewPREvent) {
+	if s.githubService == nil {
+		return
+	}
+	pr := evt.PR
+	if err := s.githubService.ReleaseReviewPRTask(
+		ctx, evt.ReviewWatchID, pr.RepoOwner, pr.RepoName, pr.Number,
+	); err != nil {
+		s.logger.Warn("failed to release review PR reservation after task-create failure",
+			zap.Int("pr_number", pr.Number),
+			zap.Error(err))
+	}
+}
+
+// attachTaskToReservation stamps the created task ID onto the reservation and
+// associates the PR with the task so the frontend can display PR info.
+func (s *Service) attachTaskToReservation(ctx context.Context, evt *github.NewReviewPREvent, taskID string) {
+	if s.githubService == nil {
+		return
+	}
+	pr := evt.PR
+	if err := s.githubService.AssignReviewPRTaskID(
+		ctx, evt.ReviewWatchID, pr.RepoOwner, pr.RepoName, pr.Number, taskID,
+	); err != nil {
+		s.logger.Error("failed to assign task ID to review PR reservation",
+			zap.String("task_id", taskID),
+			zap.Int("pr_number", pr.Number),
+			zap.Error(err))
+	}
+	if _, err := s.githubService.AssociatePRWithTask(ctx, taskID, pr); err != nil {
+		s.logger.Error("failed to associate PR with review task",
+			zap.String("task_id", taskID),
+			zap.Int("pr_number", pr.Number),
+			zap.Error(err))
+	}
+}
+
+// buildReviewTaskRequest builds the ReviewTaskRequest payload from an event.
+func buildReviewTaskRequest(evt *github.NewReviewPREvent, repositories []ReviewTaskRepository, repoSlug string) *ReviewTaskRequest {
+	pr := evt.PR
+	return &ReviewTaskRequest{
+		WorkspaceID:    evt.WorkspaceID,
+		WorkflowID:     evt.WorkflowID,
+		WorkflowStepID: evt.WorkflowStepID,
+		Title:          fmt.Sprintf("PR #%d: %s", pr.Number, pr.Title),
+		Description:    interpolateReviewPrompt(evt.Prompt, pr),
+		Repositories:   repositories,
+		Metadata: map[string]interface{}{
+			"review_watch_id":     evt.ReviewWatchID,
+			"pr_number":           pr.Number,
+			"pr_url":              pr.HTMLURL,
+			"pr_repo":             repoSlug,
+			"pr_author":           pr.AuthorLogin,
+			"pr_branch":           pr.HeadBranch,
+			"agent_profile_id":    evt.AgentProfileID,
+			"executor_profile_id": evt.ExecutorProfileID,
+		},
+	}
 }
 
 // shouldAutoStartStep checks if the workflow step has the OnEnterAutoStartAgent action.
