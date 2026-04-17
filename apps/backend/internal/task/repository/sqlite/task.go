@@ -231,28 +231,27 @@ func (r *Repository) ListTasksByWorkspace(ctx context.Context, workspaceID, work
 }
 
 // queryAllTasks fetches all tasks (no search) for a workspace with pagination.
-func (r *Repository) queryAllTasks(ctx context.Context, workspaceID, archiveFilter, workflowID, repositoryID string, pageSize, offset int) (*sql.Rows, int, error) {
-	filter := archiveFilter
+func (r *Repository) queryAllTasks(ctx context.Context, workspaceID, taskFilter, workflowID, repositoryID string, pageSize, offset int) (*sql.Rows, int, error) {
 	args := []interface{}{workspaceID}
 	if workflowID != "" {
-		filter += " AND workflow_id = ?"
+		taskFilter += " AND workflow_id = ?"
 		args = append(args, workflowID)
 	}
 	if repositoryID != "" {
-		filter += " AND id IN (SELECT task_id FROM task_repositories WHERE repository_id = ?)"
+		taskFilter += " AND id IN (SELECT task_id FROM task_repositories WHERE repository_id = ?)"
 		args = append(args, repositoryID)
 	}
 	var total int
-	if err := r.ro.QueryRowContext(ctx, r.ro.Rebind(`SELECT COUNT(*) FROM tasks WHERE workspace_id = ?`+filter), args...).Scan(&total); err != nil {
+	if err := r.ro.QueryRowContext(ctx, r.ro.Rebind(`SELECT COUNT(*) FROM tasks WHERE workspace_id = ?`+taskFilter), args...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 	rows, err := r.ro.QueryContext(ctx, r.ro.Rebind(`
 		SELECT id, workspace_id, workflow_id, workflow_step_id, title, description, state, priority, position, metadata, is_ephemeral, parent_id, archived_at, created_at, updated_at
 		FROM tasks
-		WHERE workspace_id = ?`+filter+`
+		WHERE workspace_id = ?`+taskFilter+`
 		ORDER BY updated_at DESC
 		LIMIT ? OFFSET ?
-	`), append(args, pageSize, offset)...)
+	`), append(append([]interface{}{}, args...), pageSize, offset)...)
 	return rows, total, err
 }
 
