@@ -1487,14 +1487,17 @@ func (s *Service) PromptTask(ctx context.Context, taskID, sessionID string, prom
 				zap.String("session_id", sessionID),
 				zap.Error(err))
 		}
-		// Revert session state so it doesn't stay stuck in RUNNING.
-		// Use repo directly to bypass state machine guards that block transitions from terminal states.
-		if revertErr := s.repo.UpdateTaskSessionState(ctx, sessionID, previousSessionState, ""); revertErr != nil {
-			s.logger.Error("failed to revert session state after prompt error",
-				zap.String("session_id", sessionID),
-				zap.String("target_state", string(previousSessionState)),
-				zap.Error(revertErr))
-		}
+		// Revert session state so it doesn't stay stuck in RUNNING. Route through the
+		// wrapper so WS subscribers are notified — the UI relies on the
+		// session.state_changed broadcast to flip the composer/pause button out of
+		// "Agent is running". The wrapper's terminal-state guard is also correct here:
+		// if a concurrent agent-failure handler moved the session to FAILED we don't
+		// want to overwrite that with previousSessionState. Do NOT pass the preloaded
+		// `session` — the wrapper must re-read the row to see any such concurrent
+		// terminal transition; the stale pre-RUNNING snapshot would defeat the guard.
+		// allowWakeFromWaiting=false — this is a revert away from RUNNING, never a
+		// wake transition; the flag only matters when going WAITING_FOR_INPUT → RUNNING.
+		s.updateTaskSessionState(ctx, taskID, sessionID, previousSessionState, "", false)
 		if !isTransientPromptError(err) {
 			_ = s.taskRepo.UpdateTaskState(ctx, taskID, v1.TaskStateReview)
 		}
