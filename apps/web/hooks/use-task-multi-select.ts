@@ -86,6 +86,7 @@ function useBulkOperations({
   setSelectedIds,
   setIsDeleting,
   setIsArchiving,
+  setIsMultiSelectEnabled,
   moveTaskById,
   deleteTaskById,
   archiveTaskById,
@@ -98,6 +99,7 @@ function useBulkOperations({
   setSelectedIds: (ids: Set<string>) => void;
   setIsDeleting: (v: boolean) => void;
   setIsArchiving: (v: boolean) => void;
+  setIsMultiSelectEnabled: (v: boolean) => void;
   moveTaskById: ReturnType<typeof useTaskActions>["moveTaskById"];
   deleteTaskById: ReturnType<typeof useTaskActions>["deleteTaskById"];
   archiveTaskById: ReturnType<typeof useTaskActions>["archiveTaskById"];
@@ -114,11 +116,20 @@ function useBulkOperations({
       const results = await Promise.allSettled(idList.map((id) => deleteTaskById(id)));
       const succeeded = new Set(idList.filter((_, i) => results[i].status === "fulfilled"));
       removeTasksFromStore(succeeded);
-      setSelectedIds(new Set(idList.filter((_, i) => results[i].status === "rejected")));
+      const failed = new Set(idList.filter((_, i) => results[i].status === "rejected"));
+      setSelectedIds(failed);
+      if (failed.size === 0) setIsMultiSelectEnabled(false);
     } finally {
       setIsDeleting(false);
     }
-  }, [deleteTaskById, removeTasksFromStore, selectedIdsRef, setIsDeleting, setSelectedIds]);
+  }, [
+    deleteTaskById,
+    removeTasksFromStore,
+    selectedIdsRef,
+    setIsDeleting,
+    setIsMultiSelectEnabled,
+    setSelectedIds,
+  ]);
 
   const bulkArchive = useCallback(async () => {
     const ids = selectedIdsRef.current;
@@ -129,11 +140,20 @@ function useBulkOperations({
       const results = await Promise.allSettled(idList.map((id) => archiveTaskById(id)));
       const succeeded = new Set(idList.filter((_, i) => results[i].status === "fulfilled"));
       removeTasksFromStore(succeeded);
-      setSelectedIds(new Set(idList.filter((_, i) => results[i].status === "rejected")));
+      const failed = new Set(idList.filter((_, i) => results[i].status === "rejected"));
+      setSelectedIds(failed);
+      if (failed.size === 0) setIsMultiSelectEnabled(false);
     } finally {
       setIsArchiving(false);
     }
-  }, [archiveTaskById, removeTasksFromStore, selectedIdsRef, setIsArchiving, setSelectedIds]);
+  }, [
+    archiveTaskById,
+    removeTasksFromStore,
+    selectedIdsRef,
+    setIsArchiving,
+    setIsMultiSelectEnabled,
+    setSelectedIds,
+  ]);
 
   const bulkMove = useCallback(
     async (targetStepId: string) => {
@@ -174,14 +194,19 @@ type MultiSelectAction =
   | { type: "set_deleting"; value: boolean }
   | { type: "set_archiving"; value: boolean };
 
-const INITIAL_STATE: MultiSelectState = {
+/** @internal Exported for testing. */
+export const INITIAL_STATE: MultiSelectState = {
   selectedIds: new Set(),
   isMultiSelectEnabled: false,
   isDeleting: false,
   isArchiving: false,
 };
 
-function multiSelectReducer(state: MultiSelectState, action: MultiSelectAction): MultiSelectState {
+/** @internal Exported for testing. */
+export function multiSelectReducer(
+  state: MultiSelectState,
+  action: MultiSelectAction,
+): MultiSelectState {
   switch (action.type) {
     case "reset":
       return INITIAL_STATE;
@@ -266,6 +291,7 @@ export function useTaskMultiSelect(workflowId: string | null) {
     setSelectedIds,
     setIsDeleting,
     setIsArchiving,
+    setIsMultiSelectEnabled,
     moveTaskById,
     deleteTaskById,
     archiveTaskById,
