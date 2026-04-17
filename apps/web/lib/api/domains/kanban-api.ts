@@ -123,7 +123,14 @@ export async function archiveTask(taskId: string, options?: ApiRequestOptions) {
 
 export async function listTasksByWorkspace(
   workspaceId: string,
-  params: { page?: number; pageSize?: number; query?: string; includeArchived?: boolean; workflowId?: string | null; repositoryId?: string | null } = {},
+  params: {
+    page?: number;
+    pageSize?: number;
+    query?: string;
+    includeArchived?: boolean;
+    workflowId?: string | null;
+    repositoryId?: string | null;
+  } = {},
   options?: ApiRequestOptions,
 ) {
   const baseUrl = options?.baseUrl ?? getBackendConfig().apiBaseUrl;

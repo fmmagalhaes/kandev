@@ -276,6 +276,8 @@ function useTasksPageEffects({
   fetchTasks,
   pagination,
   showArchived,
+  activeWorkflowId,
+  selectedRepositoryId,
 }: {
   debouncedQuery: string;
   setPagination: (next: PaginationState | ((prev: PaginationState) => PaginationState)) => void;
@@ -283,10 +285,12 @@ function useTasksPageEffects({
   fetchTasks: () => void;
   pagination: PaginationState;
   showArchived: boolean;
+  activeWorkflowId: string | null;
+  selectedRepositoryId: string | null;
 }) {
   useEffect(() => {
     void Promise.resolve().then(() => setPagination((prev) => ({ ...prev, pageIndex: 0 })));
-  }, [debouncedQuery, setPagination]);
+  }, [debouncedQuery, activeWorkflowId, selectedRepositoryId, setPagination]);
 
   useEffect(() => {
     if (activeWorkspaceId) fetchTasks();
@@ -311,7 +315,6 @@ function useTasksPageComputed({
   deletingTaskId,
   router,
   activeWorkflowId,
-  tasks,
 }: {
   total: number;
   pagination: PaginationState;
@@ -323,7 +326,6 @@ function useTasksPageComputed({
   deletingTaskId: string | null;
   router: ReturnType<typeof useRouter>;
   activeWorkflowId: string | null;
-  tasks: Task[];
 }) {
   const pageCount = useMemo(
     () => Math.ceil(total / pagination.pageSize),
@@ -352,7 +354,7 @@ function useTasksPageComputed({
     : workflows[0];
   const defaultStep = steps.find((s) => s.workflow_id === defaultWorkflow?.id);
 
-  return { pageCount, columns, handleRowClick, defaultWorkflow, defaultStep, filteredTasks: tasks };
+  return { pageCount, columns, handleRowClick, defaultWorkflow, defaultStep };
 }
 
 function useTasksPageSetup(props: TasksPageClientProps) {
@@ -389,6 +391,8 @@ function useTasksPageSetup(props: TasksPageClientProps) {
     fetchTasks: ops.fetchTasks,
     pagination: viewState.pagination,
     showArchived: viewState.showArchived,
+    activeWorkflowId,
+    selectedRepositoryId,
   });
   const computed = useTasksPageComputed({
     total: viewState.total,
@@ -401,7 +405,6 @@ function useTasksPageSetup(props: TasksPageClientProps) {
     deletingTaskId: ops.deletingTaskId,
     router,
     activeWorkflowId,
-    tasks: viewState.tasks,
   });
   return { ...viewState, ...ops, ...computed, activeWorkspaceId, debouncedQuery };
 }
@@ -422,7 +425,7 @@ export function TasksPageClient(props: TasksPageClientProps) {
         showArchived={s.showArchived}
         setShowArchived={s.setShowArchived}
         columns={s.columns}
-        tasks={s.filteredTasks}
+        tasks={s.tasks}
         total={s.total}
         pageCount={s.pageCount}
         pagination={s.pagination}

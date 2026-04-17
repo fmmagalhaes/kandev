@@ -9,7 +9,14 @@ import { fetchUserSettings } from "@/lib/api";
 import { StateHydrator } from "@/components/state-hydrator";
 import { mapUserSettingsResponse } from "@/lib/ssr/user-settings";
 import { TasksPageClient } from "./tasks-page-client";
-import type { Workflow, Task, WorkflowStep, Repository, Workspace, UserSettingsResponse } from "@/lib/types/http";
+import type {
+  Workflow,
+  Task,
+  WorkflowStep,
+  Repository,
+  Workspace,
+  UserSettingsResponse,
+} from "@/lib/types/http";
 import type { AppState } from "@/lib/state/store";
 
 type WorkspaceData = {
@@ -21,19 +28,30 @@ type WorkspaceData = {
   activeWorkflowId: string | null;
 };
 
-async function fetchWorkspaceData(workspaceId: string, settingsResponse: UserSettingsResponse | null): Promise<WorkspaceData> {
+async function fetchWorkspaceData(
+  workspaceId: string,
+  settingsResponse: UserSettingsResponse | null,
+): Promise<WorkspaceData> {
   const savedWorkflowId = settingsResponse?.settings?.workflow_filter_id ?? null;
   const savedRepositoryId = settingsResponse?.settings?.repository_ids?.[0] ?? null;
 
-  const [workflowsResponse, repositoriesResponse, tasksResponse, stepsResponse] = await Promise.all([
-    listWorkflowsAction(workspaceId),
-    listRepositoriesAction(workspaceId),
-    listTasksByWorkspaceAction(workspaceId, { page: 1, pageSize: 25, workflowId: savedWorkflowId, repositoryId: savedRepositoryId }),
-    listWorkspaceWorkflowStepsAction(workspaceId),
-  ]);
+  const [workflowsResponse, repositoriesResponse, tasksResponse, stepsResponse] = await Promise.all(
+    [
+      listWorkflowsAction(workspaceId),
+      listRepositoriesAction(workspaceId),
+      listTasksByWorkspaceAction(workspaceId, {
+        page: 1,
+        pageSize: 25,
+        workflowId: savedWorkflowId,
+        repositoryId: savedRepositoryId,
+      }),
+      listWorkspaceWorkflowStepsAction(workspaceId),
+    ],
+  );
 
   const workflows = workflowsResponse.workflows;
-  const activeWorkflowId = workflows.find((w) => w.id === savedWorkflowId)?.id ?? workflows[0]?.id ?? null;
+  const activeWorkflowId =
+    workflows.find((w) => w.id === savedWorkflowId)?.id ?? workflows[0]?.id ?? null;
 
   return {
     workflows,

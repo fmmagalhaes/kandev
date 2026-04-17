@@ -319,7 +319,7 @@ func (r *Repository) searchTasks(ctx context.Context, workspaceID, query, filter
 		ORDER BY t.updated_at DESC
 		LIMIT ? OFFSET ?
 	`, tFilter, like, like, like, like)
-	selectArgs := append(countArgs, pageSize, offset)
+	selectArgs := append(append([]interface{}{}, countArgs...), pageSize, offset)
 	rows, err := r.ro.QueryContext(ctx, r.ro.Rebind(selectQuery), selectArgs...)
 	return rows, total, err
 }
